@@ -1,11 +1,6 @@
 #!/bin/env python3
-
-import threading
+from http.server import test, SimpleHTTPRequestHandler
 from functools import partial
-import http.server as hp
 
-if __name__ == "__main__":
-    handler = partial(hp.SimpleHTTPRequestHandler, directory="static/")
-    server = hp.ThreadingHTTPServer(("", 8080), handler)
-    threading.Thread(target=server.serve_forever, daemon=True).start()
-    pass
+test(HandlerClass=partial(SimpleHTTPRequestHandler,
+     directory="./app/static"), port=8080, bind="127.0.0.1")
