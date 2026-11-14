@@ -108,7 +108,7 @@ class User(BaseModel):
 
 
 class Reading(BaseModel):
-    id: Optional[int]
+    id: Optional[int] = None
     astronaut_id: str
     timestamp: datetime
     hr: float          # heart rate, bpm
@@ -121,7 +121,7 @@ class Reading(BaseModel):
 
 
 class Alert(BaseModel):
-    id: Optional[int]
+    id: Optional[int] = None
     astronaut_id: str
     severity: Literal["info", "warning", "critical"]
     metric: str
