@@ -2,38 +2,44 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>NASA Astronaut Health Monitoring Dashboard</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NASA Astronaut Health Dashboard</title>
   
-  <!-- Load HTMX (for auto-refreshing the dashboard) -->
+  <!-- Load HTMX for auto-refresh -->
   <script src="https://unpkg.com/htmx.org@2.0.4"></script>
-  <!-- Load Tailwind CSS (for layout and styling) -->
+  <!-- Load Tailwind CSS for styling -->
   <script src="https://cdn.tailwindcss.com"></script>
-  <!-- Load custom stylesheet -->
+  <!-- Load custom deep space stylesheet -->
   <link rel="stylesheet" href="style.css">
 </head>
 <body class="bg-slate-950 text-slate-100 p-6">
 
-  <header class="flex justify-between items-center border-b border-slate-800 pb-4 mb-6">
+  <header class="border-b border-slate-800 pb-4 mb-6">
     <h1 class="text-2xl font-bold text-sky-400">
       NASA-STD-3001 Crew Vital Signs Monitor
     </h1>
-    <select name="astronaut_id"
-            hx-get="/partials/vitals"
-            hx-target="#dashboard"
-            hx-trigger="change"
-            class="bg-slate-900 border border-slate-700 rounded px-3 py-2">
-      <option value="ASTRO-01">ASTRO-01 (EVA)</option>
-      <option value="ASTRO-02">ASTRO-02 (Rest)</option>
-    </select>
+    <p class="text-slate-400 mt-2 text-sm">Real-time telemetry and alert system</p>
   </header>
 
-  <!-- Content here will be automatically replaced by the FastAPI backend -->
-  <main id="dashboard"
-        hx-get="/partials/vitals"
-        hx-trigger="load, every 3s"
-        hx-swap="innerHTML">
-        <p class="text-slate-400">Waiting for backend data connection...</p>
+  <main>
+    <!-- 1. Vitals Section (Matches @app.get("/partials/vitals") in main.py) -->
+    <section id="vitals-section"
+             hx-get="/partials/vitals"
+             hx-trigger="load, every 3s"
+             hx-swap="innerHTML">
+      <p class="text-slate-500">Loading vital signs telemetry...</p>
+    </section>
+
+    <!-- 2. Alerts Section (Matches @app.get("/partials/alerts") in main.py) -->
+    <section id="alerts-section"
+             hx-get="/partials/alerts"
+             hx-trigger="load, every 3s"
+             hx-swap="innerHTML"
+             class="mt-8">
+      <p class="text-slate-500">Loading health alerts...</p>
+    </section>
   </main>
   
 </body>
 </html>
+
