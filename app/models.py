@@ -3,10 +3,12 @@ from typing import Literal, Optional
 
 from pydantic import BaseModel
 
+
 class User(BaseModel):
     id: Optional[int]
     astronaut_id: str
     name: str
+
 
 class Reading(BaseModel):
     id: Optional[int]
@@ -22,7 +24,7 @@ class Reading(BaseModel):
 
 
 class Alert(BaseModel):
-    id: Optional[id]
+    id: Optional[int]
     astronaut_id: str
     severity: Literal["info", "warning", "critical"]
     metric: str
