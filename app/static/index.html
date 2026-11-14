@@ -24,20 +24,20 @@
     </header>
 
     <main class="space-y-10">
-      <!-- 1. Vitals Section (Polls /partials/vitals every 3s) -->
-      <section id="vitals-section"
-               hx-get="/partials/vitals"
-               hx-trigger="load, every 3s"
-               hx-swap="innerHTML">
-        <div class="metric-card p-6 text-zinc-400 text-sm">Loading vital signs telemetry...</div>
-      </section>
-
-      <!-- 2. Alerts Section (Polls /partials/alerts every 3s) -->
+      <!-- 1. Alerts Section (Moved to the top!) -->
       <section id="alerts-section"
                hx-get="/partials/alerts"
                hx-trigger="load, every 3s"
                hx-swap="innerHTML">
         <div class="metric-card p-6 text-zinc-400 text-sm">Loading health alerts...</div>
+      </section>
+
+      <!-- 2. Vitals Section (Now below Alerts) -->
+      <section id="vitals-section"
+               hx-get="/partials/vitals"
+               hx-trigger="load, every 3s"
+               hx-swap="innerHTML">
+        <div class="metric-card p-6 text-zinc-400 text-sm">Loading vital signs telemetry...</div>
       </section>
     </main>
   </div>
