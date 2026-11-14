@@ -14,19 +14,20 @@
             Activity: {{ r.activity }}
           </span>
         </div>
-        <span class="text-xs text-zinc-500">Updated {{ r.timestamp.strftime('%H:%M:%S') }}</span>
+        <span class="text-xs text-zinc-500">Updated {{ r.timestamp.strftime('%H:%M:%S') }} · Click any card for chart & history</span>
       </div>
 
-      <!-- 6 Vital Signs Cards Grid -->
+      <!-- 6 Clickable Vital Signs Cards Grid -->
       <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
 
         <!-- 1. Heart Rate (hr) -->
-        <div class="metric-card p-5 flex flex-col justify-between">
+        <div onclick="openMetricModal('{{ r.astronaut_id }}', 'hr', 'Heart Rate', 'BPM')"
+             class="metric-card p-5 flex flex-col justify-between cursor-pointer group">
           <div class="flex items-center justify-between">
             <span class="text-sm font-semibold text-rose-500 flex items-center gap-1.5">
               <span>❤️</span> Heart Rate
             </span>
-            <span class="text-xs text-zinc-500">hr</span>
+            <span class="text-xs text-zinc-500 group-hover:text-zinc-300 transition">View Trend ›</span>
           </div>
           <div class="my-4">
             <span class="text-4xl font-bold tracking-tight text-white">{{ "%.0f"|format(r.hr) }}</span>
@@ -34,17 +35,18 @@
           </div>
           <div class="text-xs text-zinc-500 flex justify-between border-t border-white/5 pt-2">
             <span>Mode: {{ r.activity|upper }}</span>
-            <span class="text-zinc-400">Nominal Range</span>
+            <span class="text-zinc-400">Tap for History</span>
           </div>
         </div>
 
         <!-- 2. Blood Oxygen (spo2) -->
-        <div class="metric-card p-5 flex flex-col justify-between">
+        <div onclick="openMetricModal('{{ r.astronaut_id }}', 'spo2', 'Blood Oxygen', '%')"
+             class="metric-card p-5 flex flex-col justify-between cursor-pointer group">
           <div class="flex items-center justify-between">
             <span class="text-sm font-semibold text-sky-400 flex items-center gap-1.5">
               <span>🫁</span> Blood Oxygen
             </span>
-            <span class="text-xs text-zinc-500">spo2</span>
+            <span class="text-xs text-zinc-500 group-hover:text-zinc-300 transition">View Trend ›</span>
           </div>
           <div class="my-4">
             <span class="text-4xl font-bold tracking-tight text-white">{{ "%.1f"|format(r.spo2) }}</span>
@@ -57,12 +59,13 @@
         </div>
 
         <!-- 3. Body Temperature (temp) -->
-        <div class="metric-card p-5 flex flex-col justify-between">
+        <div onclick="openMetricModal('{{ r.astronaut_id }}', 'temp', 'Body Temp', '°C')"
+             class="metric-card p-5 flex flex-col justify-between cursor-pointer group">
           <div class="flex items-center justify-between">
             <span class="text-sm font-semibold text-amber-400 flex items-center gap-1.5">
               <span>🌡️</span> Body Temp
             </span>
-            <span class="text-xs text-zinc-500">temp</span>
+            <span class="text-xs text-zinc-500 group-hover:text-zinc-300 transition">View Trend ›</span>
           </div>
           <div class="my-4">
             <span class="text-4xl font-bold tracking-tight text-white">{{ "%.1f"|format(r.temp) }}</span>
@@ -75,12 +78,13 @@
         </div>
 
         <!-- 4. Systolic Blood Pressure (bp_sys) -->
-        <div class="metric-card p-5 flex flex-col justify-between">
+        <div onclick="openMetricModal('{{ r.astronaut_id }}', 'bp_sys', 'Systolic BP', 'mmHg')"
+             class="metric-card p-5 flex flex-col justify-between cursor-pointer group">
           <div class="flex items-center justify-between">
             <span class="text-sm font-semibold text-purple-400 flex items-center gap-1.5">
               <span>🩸</span> Systolic BP
             </span>
-            <span class="text-xs text-zinc-500">bp_sys</span>
+            <span class="text-xs text-zinc-500 group-hover:text-zinc-300 transition">View Trend ›</span>
           </div>
           <div class="my-4">
             <span class="text-4xl font-bold tracking-tight text-white">{{ "%.0f"|format(r.bp_sys) }}</span>
@@ -93,12 +97,13 @@
         </div>
 
         <!-- 5. Diastolic Blood Pressure (bp_dia) -->
-        <div class="metric-card p-5 flex flex-col justify-between">
+        <div onclick="openMetricModal('{{ r.astronaut_id }}', 'bp_dia', 'Diastolic BP', 'mmHg')"
+             class="metric-card p-5 flex flex-col justify-between cursor-pointer group">
           <div class="flex items-center justify-between">
             <span class="text-sm font-semibold text-indigo-400 flex items-center gap-1.5">
               <span>💜</span> Diastolic BP
             </span>
-            <span class="text-xs text-zinc-500">bp_dia</span>
+            <span class="text-xs text-zinc-500 group-hover:text-zinc-300 transition">View Trend ›</span>
           </div>
           <div class="my-4">
             <span class="text-4xl font-bold tracking-tight text-white">{{ "%.0f"|format(r.bp_dia) }}</span>
@@ -111,12 +116,13 @@
         </div>
 
         <!-- 6. Respiration Rate (resp) -->
-        <div class="metric-card p-5 flex flex-col justify-between">
+        <div onclick="openMetricModal('{{ r.astronaut_id }}', 'resp', 'Respiratory Rate', 'br/min')"
+             class="metric-card p-5 flex flex-col justify-between cursor-pointer group">
           <div class="flex items-center justify-between">
             <span class="text-sm font-semibold text-emerald-400 flex items-center gap-1.5">
               <span>🌬️</span> Respiratory Rate
             </span>
-            <span class="text-xs text-zinc-500">resp</span>
+            <span class="text-xs text-zinc-500 group-hover:text-zinc-300 transition">View Trend ›</span>
           </div>
           <div class="my-4">
             <span class="text-4xl font-bold tracking-tight text-white">{{ "%.1f"|format(r.resp) }}</span>
@@ -134,44 +140,44 @@
   </div>
 
 {% else %}
-  <!-- Default Preview Cards when no telemetry has been posted yet -->
+  <!-- Default Standby Cards (Also Clickable!) -->
   <div class="space-y-4">
     <div class="flex justify-between items-center px-2">
       <div class="flex items-center gap-3">
         <span class="text-xl font-bold text-zinc-300">ASTRO-01 (Standby)</span>
         <span class="px-3 py-1 rounded-full text-xs font-semibold bg-zinc-800 text-zinc-400">Activity: REST</span>
       </div>
-      <span class="text-xs text-zinc-500">Waiting for POST /vitals telemetry...</span>
+      <span class="text-xs text-zinc-500">Click any card to view chart & history</span>
     </div>
 
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-      <div class="metric-card p-5">
-        <div class="text-sm font-semibold text-rose-500">❤️ Heart Rate</div>
+      <div onclick="openMetricModal('ASTRO-01', 'hr', 'Heart Rate', 'BPM')" class="metric-card p-5 cursor-pointer group">
+        <div class="flex justify-between"><span class="text-sm font-semibold text-rose-500">❤️ Heart Rate</span><span class="text-xs text-zinc-500">View Trend ›</span></div>
         <div class="my-4"><span class="text-4xl font-bold text-white">--</span> <span class="text-sm text-zinc-400">BPM</span></div>
         <div class="text-xs text-zinc-500 border-t border-white/5 pt-2">Normal: 50 - 100 BPM</div>
       </div>
-      <div class="metric-card p-5">
-        <div class="text-sm font-semibold text-sky-400">🫁 Blood Oxygen</div>
+      <div onclick="openMetricModal('ASTRO-01', 'spo2', 'Blood Oxygen', '%')" class="metric-card p-5 cursor-pointer group">
+        <div class="flex justify-between"><span class="text-sm font-semibold text-sky-400">🫁 Blood Oxygen</span><span class="text-xs text-zinc-500">View Trend ›</span></div>
         <div class="my-4"><span class="text-4xl font-bold text-white">--</span> <span class="text-sm text-zinc-400">%</span></div>
         <div class="text-xs text-zinc-500 border-t border-white/5 pt-2">Normal: 95 - 100 %</div>
       </div>
-      <div class="metric-card p-5">
-        <div class="text-sm font-semibold text-amber-400">🌡️ Body Temp</div>
+      <div onclick="openMetricModal('ASTRO-01', 'temp', 'Body Temp', '°C')" class="metric-card p-5 cursor-pointer group">
+        <div class="flex justify-between"><span class="text-sm font-semibold text-amber-400">🌡️ Body Temp</span><span class="text-xs text-zinc-500">View Trend ›</span></div>
         <div class="my-4"><span class="text-4xl font-bold text-white">--</span> <span class="text-sm text-zinc-400">°C</span></div>
         <div class="text-xs text-zinc-500 border-t border-white/5 pt-2">Normal: 36.1 - 37.5 °C</div>
       </div>
-      <div class="metric-card p-5">
-        <div class="text-sm font-semibold text-purple-400">🩸 Systolic BP</div>
+      <div onclick="openMetricModal('ASTRO-01', 'bp_sys', 'Systolic BP', 'mmHg')" class="metric-card p-5 cursor-pointer group">
+        <div class="flex justify-between"><span class="text-sm font-semibold text-purple-400">🩸 Systolic BP</span><span class="text-xs text-zinc-500">View Trend ›</span></div>
         <div class="my-4"><span class="text-4xl font-bold text-white">--</span> <span class="text-sm text-zinc-400">mmHg</span></div>
         <div class="text-xs text-zinc-500 border-t border-white/5 pt-2">Normal: 90 - 139 mmHg</div>
       </div>
-      <div class="metric-card p-5">
-        <div class="text-sm font-semibold text-indigo-400">💜 Diastolic BP</div>
+      <div onclick="openMetricModal('ASTRO-01', 'bp_dia', 'Diastolic BP', 'mmHg')" class="metric-card p-5 cursor-pointer group">
+        <div class="flex justify-between"><span class="text-sm font-semibold text-indigo-400">💜 Diastolic BP</span><span class="text-xs text-zinc-500">View Trend ›</span></div>
         <div class="my-4"><span class="text-4xl font-bold text-white">--</span> <span class="text-sm text-zinc-400">mmHg</span></div>
         <div class="text-xs text-zinc-500 border-t border-white/5 pt-2">Normal: 60 - 89 mmHg</div>
       </div>
-      <div class="metric-card p-5">
-        <div class="text-sm font-semibold text-emerald-400">🌬️ Respiratory Rate</div>
+      <div onclick="openMetricModal('ASTRO-01', 'resp', 'Respiratory Rate', 'br/min')" class="metric-card p-5 cursor-pointer group">
+        <div class="flex justify-between"><span class="text-sm font-semibold text-emerald-400">🌬️ Respiratory Rate</span><span class="text-xs text-zinc-500">View Trend ›</span></div>
         <div class="my-4"><span class="text-4xl font-bold text-white">--</span> <span class="text-sm text-zinc-400">br/min</span></div>
         <div class="text-xs text-zinc-500 border-t border-white/5 pt-2">Normal: 12 - 20 br/min</div>
       </div>
