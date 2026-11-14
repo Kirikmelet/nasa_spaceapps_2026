@@ -5,12 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>NASA Astronaut Health Dashboard</title>
   <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+  <!-- Load Idiomorph extension for smooth, flicker-free DOM morphing -->
+  <script src="https://unpkg.com/idiomorph@0.3.0/dist/idiomorph-ext.min.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- Load Chart.js for interactive line charts -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <link rel="stylesheet" href="style.css">
 </head>
-<body class="dashboard-bg text-white min-h-screen p-6 md:p-10">
+<body hx-ext="morph" class="dashboard-bg text-white min-h-screen p-6 md:p-10">
 
   <div class="max-w-6xl mx-auto">
     <!-- Dashboard Header -->
@@ -26,11 +28,11 @@
     </header>
 
     <main class="space-y-10">
-      <!-- 1. Alerts Section (Stacked by default) -->
+      <!-- 1. Alerts Section -->
       <section id="alerts-section"
                hx-get="/partials/alerts"
                hx-trigger="load, every 3s"
-               hx-swap="innerHTML">
+               hx-swap="morph:innerHTML">
         <div class="metric-card p-6 text-zinc-400 text-sm">Loading health alerts...</div>
       </section>
 
@@ -38,7 +40,7 @@
       <section id="vitals-section"
                hx-get="/partials/vitals"
                hx-trigger="load, every 3s"
-               hx-swap="innerHTML">
+               hx-swap="morph:innerHTML">
         <div class="metric-card p-6 text-zinc-400 text-sm">Loading vital signs telemetry...</div>
       </section>
     </main>
@@ -55,6 +57,7 @@
           <h2 id="modal-title" class="text-2xl font-bold text-white mt-0.5">Metric History</h2>
         </div>
         <div class="flex items-center gap-4">
+          <!-- Legend for Red / Yellow / Green points -->
           <div class="hidden sm:flex items-center gap-3 text-xs text-zinc-300 bg-white/5 px-3 py-1.5 rounded-full">
             <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-emerald-400"></span>Healthy</span>
             <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-amber-400"></span>Warning</span>
@@ -68,12 +71,15 @@
 
       <!-- Modal Body: Line Chart (Top) + History Table (Bottom) -->
       <div class="p-6 overflow-y-auto space-y-6">
+        
+        <!-- TOP: Line Chart Container -->
         <div class="bg-black/40 p-4 rounded-2xl border border-white/5">
           <div class="h-64 w-full relative">
             <canvas id="historyChart"></canvas>
           </div>
         </div>
 
+        <!-- BOTTOM: Historical Records List -->
         <div>
           <h3 class="text-sm font-semibold text-zinc-300 mb-3 px-1">Historical Telemetry Log (Newest First)</h3>
           <div class="overflow-hidden rounded-2xl border border-white/10 bg-black/30">
@@ -87,52 +93,53 @@
                 </tr>
               </thead>
               <tbody id="history-table-body" class="divide-y divide-white/5 text-zinc-200">
+                <!-- Populated dynamically via JS -->
               </tbody>
             </table>
           </div>
         </div>
+
       </div>
     </div>
   </div>
 
   <script>
-    // --- Stacked Alerts Expand / Collapse State ---
-    let alertsExpanded = false;
+    // Acknowledge an alert card immediately in UI and clear any duplicate unacknowledged alerts for the same (astronaut_id, metric)
+    async function acknowledgeAlertGroup(astronautId, metric, primaryAlertId, btnEl) {
+      const card = btnEl.closest('.metric-card');
+      if (card) {
+        card.remove();
+      }
+      const list = document.getElementById('alerts-list');
+      if (list && list.children.length === 0) {
+        list.outerHTML = `
+          <div id="alerts-empty" class="metric-card p-5 flex items-center gap-3 text-emerald-400 text-sm">
+            <span>✅</span>
+            <span>All crew vital signs are within nominal parameters. No active alerts.</span>
+          </div>
+        `;
+      }
 
-    function applyAlertsStackState() {
-      const list = document.getElementById('alerts-expanded-list');
-      const deco = document.getElementById('alerts-stack-deco');
-      const btn = document.getElementById('toggle-alerts-btn');
-      const hint = document.getElementById('stack-hint');
-      if (!list) return;
-
-      const totalCount = list.children.length + 1;
-      if (alertsExpanded) {
-        list.classList.remove('hidden');
-        if (deco) deco.classList.add('hidden');
-        if (hint) hint.classList.add('hidden');
-        if (btn) btn.textContent = 'Collapse ▲';
-      } else {
-        list.classList.add('hidden');
-        if (deco) deco.classList.remove('hidden');
-        if (hint) hint.classList.remove('hidden');
-        if (btn) btn.textContent = `Show All (${totalCount}) ▼`;
+      try {
+        // Acknowledge primary alert first
+        await fetch(`/alerts/${primaryAlertId}/acknowledge`, { method: 'POST' });
+        // Also acknowledge any stacked duplicate alerts for the same astronaut + metric
+        const res = await fetch('/alerts');
+        if (res.ok) {
+          const allAlerts = await res.json();
+          const duplicates = allAlerts.filter(
+            a => !a.acknowledged && a.astronaut_id === astronautId && a.metric === metric && a.id !== primaryAlertId
+          );
+          await Promise.all(
+            duplicates.map(a => fetch(`/alerts/${a.id}/acknowledge`, { method: 'POST' }))
+          );
+        }
+      } catch (err) {
+        console.error('Failed to acknowledge alert:', err);
       }
     }
 
-    function toggleAlertsStack() {
-      alertsExpanded = !alertsExpanded;
-      applyAlertsStackState();
-    }
-
-    // Re-apply stack state every time HTMX refreshes /partials/alerts
-    document.body.addEventListener('htmx:afterSwap', function(evt) {
-      if (evt.detail.target && evt.detail.target.id === 'alerts-section') {
-        applyAlertsStackState();
-      }
-    });
-
-    // --- Threshold rules matching app/alert_engine.py ---
+    // Threshold rules matching app/alert_engine.py
     const DEFAULT_LIMITS = {
       spo2:   [90, 94, null, null],
       temp:   [35.0, 35.5, 37.8, 39.0],
@@ -202,6 +209,7 @@
           pointColors.push(status.color);
         });
 
+        // 1. Update Line Chart (Top)
         const ctx = document.getElementById('historyChart').getContext('2d');
         if (chartInstance) {
           chartInstance.data.labels = labels;
@@ -246,6 +254,7 @@
           });
         }
 
+        // 2. Update Historical Log Table (Bottom, newest first)
         const tbody = document.getElementById('history-table-body');
         if (data.length === 0) {
           tbody.innerHTML = `<tr><td colspan="4" class="py-6 text-center text-zinc-500">No historical records yet. Send data via POST /vitals to populate.</td></tr>`;
@@ -274,9 +283,5 @@
       }
     }
   </script>
-</body>
-</html>
-
-
 </body>
 </html>
