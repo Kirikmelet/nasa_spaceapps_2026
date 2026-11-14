@@ -1,17 +1,35 @@
-body {
-    background: radial-gradient(circle at top, #0f172a, #020617);
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+/* Space Telemetry Dark Mode Theme */
+body.dashboard-bg {
+    background-color: #000000;
+    background-image: 
+        radial-gradient(at 0% 0%, rgba(28, 28, 30, 0.8) 0px, transparent 50%),
+        radial-gradient(at 100% 0%, rgba(14, 116, 144, 0.15) 0px, transparent 50%);
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
 }
 
-header h1 {
-    text-shadow: 0 0 10px rgba(56, 189, 248, 0.5);
+/* Rounded Telemetry Card */
+.metric-card {
+    background: rgba(28, 28, 30, 0.85);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-radius: 24px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    transition: transform 0.2s ease, border-color 0.2s ease;
 }
 
-@keyframes pulse-red {
-    0%, 100% { box-shadow: 0 0 0 0 rgba(244, 63, 94, 0.4); }
-    50% { box-shadow: 0 0 15px 5px rgba(244, 63, 94, 0.2); }
+.metric-card:hover {
+    transform: translateY(-2px);
+    border-color: rgba(255, 255, 255, 0.18);
 }
 
-.border-rose-500 {
-    animation: pulse-red 2s infinite;
+/* Critical Alert Pulse Effect */
+@keyframes pulse-critical {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(255, 59, 48, 0.4); }
+    50% { box-shadow: 0 0 18px 4px rgba(255, 59, 48, 0.2); }
+}
+
+.alert-critical {
+    border-color: rgba(255, 59, 48, 0.6);
+    animation: pulse-critical 2s infinite;
 }
