@@ -1,10 +1,15 @@
 from datetime import datetime
-from typing import Literal
+from typing import Literal, Optional
 
 from pydantic import BaseModel
 
+class User(BaseModel):
+    id: Optional[int]
+    astronaut_id: str
+    name: str
 
 class Reading(BaseModel):
+    id: Optional[int]
     astronaut_id: str
     timestamp: datetime
     hr: float          # heart rate, bpm
@@ -17,7 +22,7 @@ class Reading(BaseModel):
 
 
 class Alert(BaseModel):
-    id: int
+    id: Optional[id]
     astronaut_id: str
     severity: Literal["info", "warning", "critical"]
     metric: str
