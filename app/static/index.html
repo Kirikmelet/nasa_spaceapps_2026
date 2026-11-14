@@ -104,26 +104,72 @@
   </div>
 
   <script>
-    // Acknowledge an alert card immediately in UI and clear any duplicate unacknowledged alerts for the same (astronaut_id, metric)
+    // Global state to remember whether the user expanded the alerts panel (default: collapsed)
+    window.alertsExpanded = false;
+
+    function applyAlertsCollapseState() {
+      const list = document.getElementById('alerts-list');
+      const text = document.getElementById('alerts-toggle-text');
+      const icon = document.getElementById('alerts-toggle-icon');
+      if (!list) return;
+
+      if (window.alertsExpanded) {
+        list.classList.remove('hidden');
+        if (text) text.textContent = 'Click to collapse';
+        if (icon) icon.style.transform = 'rotate(180deg)';
+      } else {
+        list.classList.add('hidden');
+        if (text) text.textContent = 'Click to expand';
+        if (icon) icon.style.transform = 'rotate(0deg)';
+      }
+    }
+
+    function toggleAlertsPanel() {
+      window.alertsExpanded = !window.alertsExpanded;
+      applyAlertsCollapseState();
+    }
+
+    // Re-apply collapse/expand state immediately after every HTMX 3s refresh so it never resets
+    document.body.addEventListener('htmx:afterSwap', function(evt) {
+      if (evt.detail.target && evt.detail.target.id === 'alerts-section') {
+        applyAlertsCollapseState();
+      }
+    });
+
+    // Acknowledge an alert card immediately in UI and clear any duplicate unacknowledged alerts
     async function acknowledgeAlertGroup(astronautId, metric, primaryAlertId, btnEl) {
       const card = btnEl.closest('.metric-card');
       if (card) {
         card.remove();
       }
       const list = document.getElementById('alerts-list');
-      if (list && list.children.length === 0) {
-        list.outerHTML = `
-          <div id="alerts-empty" class="metric-card p-5 flex items-center gap-3 text-emerald-400 text-sm">
-            <span>✅</span>
-            <span>All crew vital signs are within nominal parameters. No active alerts.</span>
-          </div>
-        `;
+      if (list) {
+        const remaining = list.children.length;
+        if (remaining === 0) {
+          window.alertsExpanded = false;
+          const container = document.getElementById('alerts-container');
+          if (container) {
+            container.innerHTML = `
+              <h2 class="text-lg font-semibold text-zinc-200 px-2 flex items-center gap-2">
+                <span>🔔</span> Active Health Alerts
+              </h2>
+              <div id="alerts-empty" class="metric-card p-5 flex items-center gap-3 text-emerald-400 text-sm">
+                <span>✅</span>
+                <span>All crew vital signs are within nominal parameters. No active alerts.</span>
+              </div>
+            `;
+          }
+        } else {
+          // Update the badge count in the summary bar
+          const badge = document.querySelector('#alerts-summary-bar span.rounded-full');
+          if (badge) {
+            badge.textContent = `${remaining} Active Alert${remaining > 1 ? 's' : ''}`;
+          }
+        }
       }
 
       try {
-        // Acknowledge primary alert first
         await fetch(`/alerts/${primaryAlertId}/acknowledge`, { method: 'POST' });
-        // Also acknowledge any stacked duplicate alerts for the same astronaut + metric
         const res = await fetch('/alerts');
         if (res.ok) {
           const allAlerts = await res.json();
