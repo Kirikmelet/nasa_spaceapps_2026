@@ -1,4 +1,9 @@
-<<<<<<< HEAD
+.venv/
+venv/
+**/__pycache__/
+__pycache__/
+*.db
+.env
 # Miscellaneous
 *.class
 *.log
@@ -47,10 +52,8 @@ app.*.map.json
 
 # Widget Preview related
 .widget_preview/
-=======
 .venv/
 venv/
 __pycache__/
 *.db
 .env
->>>>>>> main

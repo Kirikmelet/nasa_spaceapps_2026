@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Literal
+from typing import Literal, Optional
 
 from pydantic import BaseModel
 
@@ -101,7 +101,14 @@ NASA_DATA: dict[MetricType, dict[ActivityType, ThresholdRange]] = {
     },
 }
 
+class User(BaseModel):
+    id: Optional[int]
+    astronaut_id: str
+    name: str
+
+
 class Reading(BaseModel):
+    id: Optional[int]
     astronaut_id: str
     timestamp: datetime
     hr: float          # heart rate, bpm
@@ -114,7 +121,7 @@ class Reading(BaseModel):
 
 
 class Alert(BaseModel):
-    id: int
+    id: Optional[int]
     astronaut_id: str
     severity: Literal["info", "warning", "critical"]
     metric: str
