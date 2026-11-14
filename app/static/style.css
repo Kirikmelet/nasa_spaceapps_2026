@@ -33,3 +33,28 @@ body.dashboard-bg {
     border-color: rgba(255, 59, 48, 0.6);
     animation: pulse-critical 2s infinite;
 }
+
+/* --- Persistent Stacked Alerts State (Immune to HTMX 3s refresh) --- */
+#alerts-expanded-list {
+    display: none;
+}
+.btn-text-collapse {
+    display: none;
+}
+
+body.alerts-open #alerts-expanded-list {
+    display: block !important;
+}
+body.alerts-open #alerts-stack-deco,
+body.alerts-open #stack-hint,
+body.alerts-open .btn-text-expand {
+    display: none !important;
+}
+body.alerts-open .btn-text-collapse {
+    display: inline !important;
+}
+
+.alert-critical {
+    border-color: rgba(255, 59, 48, 0.6);
+    animation: pulse-critical 2s infinite;
+}
