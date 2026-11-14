@@ -59,7 +59,7 @@ class BaselineDetector:
     does not teach the detector that the fault is normal.
     """
 
-    def __init__(self, window=60, min_samples=20, z_threshold=2.5, consecutive=3):
+    def __init__(self, window=60, min_samples=20, z_threshold=3.5, consecutive=3):
         self.values = deque(maxlen=window)
         self.min_samples = min_samples
         self.z_threshold = z_threshold

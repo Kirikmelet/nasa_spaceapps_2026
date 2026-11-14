@@ -1,3 +1,6 @@
+import random
+from app.alert_engine import BaselineDetector
+
 from datetime import datetime, timedelta
 
 from app.alert_engine import AlertEngine
@@ -79,3 +82,19 @@ def test_warning_escalates_to_critical_if_unresolved():
     assert first[0].severity == "warning"
     later = e.process(make(spo2=92, timestamp=T0 + timedelta(minutes=6)))
     assert later[0].severity == "critical"
+
+def test_normal_noise_never_flags():
+    random.seed(0)
+    d = BaselineDetector()
+    for _ in range(5000):
+        assert d.update(round(random.gauss(76, 2))) is None
+
+
+def test_sustained_shift_flags_and_is_not_learned():
+    random.seed(1)
+    d = BaselineDetector()
+    for _ in range(40):
+        d.update(round(random.gauss(70, 2)))
+    results = [d.update(round(random.gauss(95, 2))) for _ in range(100)]
+    assert results[0] is None and results[1] is None
+    assert all(r is not None for r in results[2:])
