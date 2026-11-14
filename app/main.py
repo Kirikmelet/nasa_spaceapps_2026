@@ -1,3 +1,6 @@
+import threading
+from app.alert_engine import AlertEngine
+
 from datetime import datetime
 from typing import Optional
 
@@ -11,6 +14,8 @@ app = FastAPI(title="Astronaut Health Monitor")
 readings: list[Reading] = []
 alerts: list[Alert] = []
 _next_alert_id = 1
+engine = AlertEngine()
+lock = threading.Lock()  # FastAPI runs plain def routes in a thread pool
 
 
 def add_alert(astronaut_id: str, severity: str, metric: str, message: str, ts: datetime) -> Alert:
@@ -30,12 +35,12 @@ def add_alert(astronaut_id: str, severity: str, metric: str, message: str, ts: d
 
 @app.post("/vitals")
 def post_vitals(reading: Reading):
-    readings.append(reading)
-    # Placeholder hard limit; the real alert engine plugs in here later
-    if reading.spo2 < 90:
-        add_alert(reading.astronaut_id, "critical", "spo2",
-                  f"SpO2 {reading.spo2}% below 90%", reading.timestamp)
-    return {"status": "ok", "stored": len(readings)}
+    with lock:
+        readings.append(reading)
+        for ev in engine.process(reading):
+            add_alert(reading.astronaut_id, ev.severity, ev.metric,
+                      ev.message, reading.timestamp)
+        return {"status": "ok", "stored": len(readings)}
 
 
 @app.get("/astronauts/{astronaut_id}/vitals")
