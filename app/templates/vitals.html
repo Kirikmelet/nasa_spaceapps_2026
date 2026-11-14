@@ -1,7 +1,7 @@
 {% if cards %}
-  <div class="space-y-8">
+  <div class="space-y-8" id="vitals-container">
     {% for r in cards %}
-    <div class="space-y-4">
+    <div class="space-y-4" id="astronaut-vitals-{{ r.astronaut_id }}">
       <!-- Astronaut Status Header -->
       <div class="flex flex-wrap justify-between items-center px-2">
         <div class="flex items-center gap-3">
@@ -21,7 +21,8 @@
       <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
 
         <!-- 1. Heart Rate (hr) -->
-        <div onclick="openMetricModal('{{ r.astronaut_id }}', 'hr', 'Heart Rate', 'BPM')"
+        <div id="card-{{ r.astronaut_id }}-hr"
+             onclick="openMetricModal('{{ r.astronaut_id }}', 'hr', 'Heart Rate', 'BPM')"
              class="metric-card p-5 flex flex-col justify-between cursor-pointer group">
           <div class="flex items-center justify-between">
             <span class="text-sm font-semibold text-rose-500 flex items-center gap-1.5">
@@ -40,7 +41,8 @@
         </div>
 
         <!-- 2. Blood Oxygen (spo2) -->
-        <div onclick="openMetricModal('{{ r.astronaut_id }}', 'spo2', 'Blood Oxygen', '%')"
+        <div id="card-{{ r.astronaut_id }}-spo2"
+             onclick="openMetricModal('{{ r.astronaut_id }}', 'spo2', 'Blood Oxygen', '%')"
              class="metric-card p-5 flex flex-col justify-between cursor-pointer group">
           <div class="flex items-center justify-between">
             <span class="text-sm font-semibold text-sky-400 flex items-center gap-1.5">
@@ -59,7 +61,8 @@
         </div>
 
         <!-- 3. Body Temperature (temp) -->
-        <div onclick="openMetricModal('{{ r.astronaut_id }}', 'temp', 'Body Temp', '°C')"
+        <div id="card-{{ r.astronaut_id }}-temp"
+             onclick="openMetricModal('{{ r.astronaut_id }}', 'temp', 'Body Temp', '°C')"
              class="metric-card p-5 flex flex-col justify-between cursor-pointer group">
           <div class="flex items-center justify-between">
             <span class="text-sm font-semibold text-amber-400 flex items-center gap-1.5">
@@ -78,7 +81,8 @@
         </div>
 
         <!-- 4. Systolic Blood Pressure (bp_sys) -->
-        <div onclick="openMetricModal('{{ r.astronaut_id }}', 'bp_sys', 'Systolic BP', 'mmHg')"
+        <div id="card-{{ r.astronaut_id }}-bp_sys"
+             onclick="openMetricModal('{{ r.astronaut_id }}', 'bp_sys', 'Systolic BP', 'mmHg')"
              class="metric-card p-5 flex flex-col justify-between cursor-pointer group">
           <div class="flex items-center justify-between">
             <span class="text-sm font-semibold text-purple-400 flex items-center gap-1.5">
@@ -97,7 +101,8 @@
         </div>
 
         <!-- 5. Diastolic Blood Pressure (bp_dia) -->
-        <div onclick="openMetricModal('{{ r.astronaut_id }}', 'bp_dia', 'Diastolic BP', 'mmHg')"
+        <div id="card-{{ r.astronaut_id }}-bp_dia"
+             onclick="openMetricModal('{{ r.astronaut_id }}', 'bp_dia', 'Diastolic BP', 'mmHg')"
              class="metric-card p-5 flex flex-col justify-between cursor-pointer group">
           <div class="flex items-center justify-between">
             <span class="text-sm font-semibold text-indigo-400 flex items-center gap-1.5">
@@ -116,7 +121,8 @@
         </div>
 
         <!-- 6. Respiration Rate (resp) -->
-        <div onclick="openMetricModal('{{ r.astronaut_id }}', 'resp', 'Respiratory Rate', 'br/min')"
+        <div id="card-{{ r.astronaut_id }}-resp"
+             onclick="openMetricModal('{{ r.astronaut_id }}', 'resp', 'Respiratory Rate', 'br/min')"
              class="metric-card p-5 flex flex-col justify-between cursor-pointer group">
           <div class="flex items-center justify-between">
             <span class="text-sm font-semibold text-emerald-400 flex items-center gap-1.5">
@@ -141,7 +147,7 @@
 
 {% else %}
   <!-- Default Standby Cards (Also Clickable!) -->
-  <div class="space-y-4">
+  <div class="space-y-4" id="vitals-standby">
     <div class="flex justify-between items-center px-2">
       <div class="flex items-center gap-3">
         <span class="text-xl font-bold text-zinc-300">ASTRO-01 (Standby)</span>
