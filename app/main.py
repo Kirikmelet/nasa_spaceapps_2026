@@ -1,94 +1,110 @@
 import threading
-from datetime import datetime
-from typing import Optional
+from typing import List, Optional
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from pydantic import BaseModel
 
 from app.alert_engine import RANK, AlertEngine
-from app.models import Alert, Reading
+from app.db import dbInstance
+from app.models import Alert, Reading, ReadingActivityType
 
 app = FastAPI(title="Astronaut Health Monitor")
 templates = Jinja2Templates(directory="app/templates")
 
-# In-memory stores (swap for SQLite later if time allows)
-readings: list[Reading] = []
-latest: dict[str, Reading] = {}   # most recent reading per astronaut
-alerts: list[Alert] = []
-_next_alert_id = 1
 engine = AlertEngine()
-lock = threading.Lock()  # FastAPI runs plain def routes in a thread pool
+engine_lock = threading.Lock()  # the engine keeps rolling state; the DB has its own lock
 
 
-def add_alert(astronaut_id: str, severity: str, metric: str, message: str, ts: datetime) -> Alert:
-    global _next_alert_id
-    alert = Alert(
-        id=_next_alert_id,
-        astronaut_id=astronaut_id,
-        severity=severity,
-        metric=metric,
-        message=message,
-        timestamp=ts,
-    )
-    _next_alert_id += 1
-    alerts.append(alert)
-    return alert
+class ActivityIn(BaseModel):
+    activity: ReadingActivityType
 
 
-# ---------- JSON API (simulator, /docs, anyone who wants raw data) ----------
+def ingest_reading(reading: Reading) -> dict:
+    """Store a reading, run it through the alert engine, store any alerts."""
+    reading_id = dbInstance.add_reading(reading)
+    with engine_lock:
+        events = engine.process(reading)
+    alert_ids = [
+        dbInstance.add_alert(Alert(
+            astronaut_id=reading.astronaut_id,
+            severity=ev.severity,
+            metric=ev.metric,
+            message=ev.message,
+            timestamp=reading.timestamp,
+        ))
+        for ev in events
+    ]
+    return {"id": reading_id, "alert_ids": alert_ids}
 
-@app.post("/vitals")
+
+# ---------- JSON API ----------
+
+@app.post("/vitals", status_code=201)  # simulator endpoint
 def post_vitals(reading: Reading):
-    with lock:
-        readings.append(reading)
-        latest[reading.astronaut_id] = reading
-        for ev in engine.process(reading):
-            add_alert(reading.astronaut_id, ev.severity, ev.metric,
-                      ev.message, reading.timestamp)
-        return {"status": "ok", "stored": len(readings)}
+    return ingest_reading(reading)
 
 
-@app.get("/astronauts/{astronaut_id}/vitals")
+@app.post("/astronauts/{astronaut_id}/vitals", status_code=201)
+def add_reading(astronaut_id: str, reading: Reading):
+    if reading.astronaut_id != astronaut_id:
+        raise HTTPException(status_code=400, detail="astronaut_id mismatch")
+    return ingest_reading(reading)
+
+
+@app.get("/astronauts/{astronaut_id}/vitals", response_model=List[Reading])
 def get_vitals(astronaut_id: str, limit: int = 300):
-    with lock:
-        data = [r for r in readings if r.astronaut_id == astronaut_id]
-    return data[-limit:]
+    return dbInstance.get_readings(astronaut_id, limit=limit)
 
 
-@app.get("/alerts")
+@app.post("/astronauts/{astronaut_id}/activity", status_code=201)
+def set_activity(astronaut_id: str, body: ActivityIn):
+    latest = dbInstance.get_latest_reading(astronaut_id)
+    if latest is None:
+        raise HTTPException(status_code=404, detail="No readings for astronaut")
+    return {"id": dbInstance.update_reading(latest.id, activity=body.activity)}
+
+
+@app.get("/astronauts/{astronaut_id}/alerts", response_model=List[Alert])
+def get_astronaut_alerts(astronaut_id: str, limit: int = 300):
+    return dbInstance.get_alerts(astronaut_id=astronaut_id, limit=limit)
+
+
+@app.post("/astronauts/{astronaut_id}/alerts", status_code=201)
+def create_alert(astronaut_id: str, alert: Alert):
+    if alert.astronaut_id != astronaut_id:
+        raise HTTPException(status_code=400, detail="astronaut_id mismatch")
+    return {"id": dbInstance.add_alert(alert)}
+
+
+@app.get("/alerts", response_model=List[Alert])
 def get_alerts(severity: Optional[str] = None):
-    with lock:
-        if severity:
-            return [a for a in alerts if a.severity == severity]
-        return list(alerts)
+    return dbInstance.get_alerts(severity=severity)
 
 
 @app.post("/alerts/{alert_id}/acknowledge")
 def acknowledge(alert_id: int):
-    with lock:
-        for a in alerts:
-            if a.id == alert_id:
-                a.acknowledged = True
-                return a
-    raise HTTPException(status_code=404, detail="Alert not found")
+    try:
+        new_id = dbInstance.update_alert(alert_id, acknowledged=True)
+    except LookupError:
+        raise HTTPException(status_code=404, detail="Alert not found")
+    return {"id": new_id, "acknowledged": True}
 
 
-# ---------- HTML partials for the HTMX dashboard (templates are front end's) ----------
+# ---------- HTML partials for the HTMX dashboard ----------
 
 @app.get("/partials/alerts")
 def alerts_partial(request: Request):
-    with lock:
-        active = [a for a in alerts if not a.acknowledged]
+    active = dbInstance.get_alerts(active_only=True)
     active.sort(key=lambda a: (-RANK[a.severity], -a.id))  # critical first, newest first
     return templates.TemplateResponse(request, "alerts.html", {"alerts": active})
 
 
 @app.get("/partials/vitals")
 def vitals_partial(request: Request):
-    with lock:
-        cards = sorted(latest.values(), key=lambda r: r.astronaut_id)
+    cards = sorted(dbInstance.get_latest_readings(), key=lambda r: r.astronaut_id)
     return templates.TemplateResponse(request, "vitals.html", {"cards": cards})
 
 

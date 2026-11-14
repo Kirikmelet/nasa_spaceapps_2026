@@ -7,12 +7,14 @@ ActivityType = Literal["rest", "sleep", "exercise", "eva"]
 MetricType = Literal["hr", "spo2", "temp", "bp_sys", "bp_dia", "resp"]
 SeverityType = Literal["info", "warning", "critical"]
 
+
 class ThresholdRange(BaseModel):
     unit: str
     normal_min: float
     normal_max: float
     warning_low: float
     warning_high: float
+
 
 NASA_DATA: dict[MetricType, dict[ActivityType, ThresholdRange]] = {
     "hr": {
@@ -101,10 +103,21 @@ NASA_DATA: dict[MetricType, dict[ActivityType, ThresholdRange]] = {
     },
 }
 
+
 class User(BaseModel):
     id: Optional[int]
     astronaut_id: str
     name: str
+
+
+READING_ACTIVITIES = [
+    "rest",
+    "sleep",
+    "exercise",
+    "eva"
+]
+
+ReadingActivityType = Literal["rest", "sleep", "exercise", "eva"]
 
 
 class Reading(BaseModel):
@@ -117,13 +130,16 @@ class Reading(BaseModel):
     bp_sys: float      # systolic blood pressure
     bp_dia: float      # diastolic blood pressure
     resp: float        # respiration rate, breaths/min
-    activity: Literal["rest", "sleep", "exercise", "eva"] = "rest"
+    activity: ReadingActivityType = "rest"
+
+
+AlertSeverityType = Literal["info", "warning", "critical"]
 
 
 class Alert(BaseModel):
     id: Optional[int] = None
     astronaut_id: str
-    severity: Literal["info", "warning", "critical"]
+    severity: AlertSeverityType
     metric: str
     message: str
     timestamp: datetime
