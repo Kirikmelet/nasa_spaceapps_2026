@@ -10,10 +10,10 @@
     </h2>
 
     {% if alerts|length > 1 %}
-      <button id="toggle-alerts-btn"
-              onclick="toggleAlertsStack()"
+      <button onclick="document.body.classList.toggle('alerts-open')"
               class="text-xs font-semibold text-sky-400 hover:text-sky-300 bg-white/5 hover:bg-white/10 px-3 py-1.5 rounded-full border border-white/10 transition">
-        Show All ({{ alerts|length }}) ▼
+        <span class="btn-text-expand">Show All ({{ alerts|length }}) ▼</span>
+        <span class="btn-text-collapse">Collapse ▲</span>
       </button>
     {% endif %}
   </div>
@@ -23,7 +23,7 @@
     <div class="relative">
       
       <!-- Top Alert Card (Always Visible) -->
-      <div onclick="if(event.target.tagName !== 'BUTTON') toggleAlertsStack()"
+      <div onclick="if(event.target.tagName !== 'BUTTON') document.body.classList.toggle('alerts-open')"
            class="metric-card p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 relative z-20 cursor-pointer
         {% if top.severity == 'critical' %} alert-critical
         {% elif top.severity == 'warning' %} border-amber-500/50
@@ -55,9 +55,9 @@
         </button>
       </div>
 
-      <!-- Stacked Deck Illusion (Visible only when collapsed) -->
+      <!-- Stacked Deck Illusion (Hidden automatically when body has .alerts-open) -->
       {% if alerts|length > 1 %}
-        <div id="alerts-stack-deco" onclick="toggleAlertsStack()" class="cursor-pointer">
+        <div id="alerts-stack-deco" onclick="document.body.classList.toggle('alerts-open')" class="cursor-pointer">
           <div class="mx-3 h-3 rounded-b-2xl bg-zinc-800/80 border-x border-b border-white/10 -mt-1 relative z-10 transition-all"></div>
           {% if alerts|length > 2 %}
             <div class="mx-6 h-2.5 rounded-b-2xl bg-zinc-900/70 border-x border-b border-white/5 -mt-1 relative z-0 transition-all"></div>
@@ -65,9 +65,9 @@
         </div>
       {% endif %}
 
-      <!-- Remaining Alerts (Hidden by default until expanded) -->
+      <!-- Remaining Alerts -->
       {% if alerts|length > 1 %}
-        <div id="alerts-expanded-list" class="hidden space-y-3 mt-3">
+        <div id="alerts-expanded-list" class="space-y-3 mt-3">
           {% for a in alerts[1:] %}
           <div class="metric-card p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4
             {% if a.severity == 'critical' %} alert-critical
