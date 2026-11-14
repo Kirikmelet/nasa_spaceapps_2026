@@ -4,42 +4,76 @@
   </h2>
 
   {% if alerts %}
-    {# Deduplicate alerts per (astronaut_id, metric) so boundary jitter doesn't spam the list #}
+    {# 按 (astronaut_id, metric) 去重 #}
     {% set seen = [] %}
-    <div class="space-y-3" id="alerts-list">
-      {% for a in alerts %}
-        {% set key = a.astronaut_id ~ ':' ~ a.metric %}
-        {% if key not in seen %}
-          {% set _ = seen.append(key) %}
-          <div id="alert-card-{{ a.astronaut_id }}-{{ a.metric }}"
-               class="metric-card p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4
-            {% if a.severity == 'critical' %} alert-critical
-            {% elif a.severity == 'warning' %} border-amber-500/50
-            {% else %} border-sky-500/40 {% endif %}">
-            
-            <div class="flex items-start gap-3">
-              <span class="px-2.5 py-1 rounded-full text-xs font-bold uppercase tracking-wider
-                {% if a.severity == 'critical' %} bg-rose-500 text-white
-                {% elif a.severity == 'warning' %} bg-amber-400 text-black
-                {% else %} bg-sky-400 text-black {% endif %}">
-                {{ a.severity }}
-              </span>
-              <div>
-                <div class="text-sm font-semibold text-white">
-                  {{ a.astronaut_id }} · <span class="uppercase text-zinc-300">{{ a.metric }}</span>
-                </div>
-                <div class="text-sm text-zinc-300 mt-0.5">{{ a.message }}</div>
-                <div class="text-xs text-zinc-500 mt-1">{{ a.timestamp.strftime('%H:%M:%S') }}</div>
-              </div>
-            </div>
+    {% set unique_alerts = [] %}
+    {% for a in alerts %}
+      {% set key = a.astronaut_id ~ ':' ~ a.metric %}
+      {% if key not in seen %}
+        {% set _ = seen.append(key) %}
+        {% set _ = unique_alerts.append(a) %}
+      {% endif %}
+    {% endfor %}
 
-            <button type="button"
-                    onclick="acknowledgeAlertGroup('{{ a.astronaut_id }}', '{{ a.metric }}', {{ a.id }}, this)"
-                    class="px-4 py-2 rounded-full bg-white/10 hover:bg-white/20 text-xs font-medium text-white transition shrink-0">
-              Acknowledge
-            </button>
+    {% set top_sev = unique_alerts[0].severity %}
+
+    <!-- 可点击的折叠/展开头部栏 -->
+    <div id="alerts-summary-bar"
+         onclick="toggleAlertsPanel()"
+         class="metric-card p-4 flex items-center justify-between cursor-pointer select-none hover:bg-white/5 transition
+         {% if top_sev == 'critical' %} alert-critical
+         {% elif top_sev == 'warning' %} border-amber-500/50
+         {% else %} border-sky-500/40 {% endif %}">
+      
+      <div class="flex items-center gap-3">
+        <span class="px-2.5 py-1 rounded-full text-xs font-bold uppercase tracking-wider
+          {% if top_sev == 'critical' %} bg-rose-500 text-white
+          {% elif top_sev == 'warning' %} bg-amber-400 text-black
+          {% else %} bg-sky-400 text-black {% endif %}">
+          {{ unique_alerts|length }} Active Alert{% if unique_alerts|length > 1 %}s{% endif %}
+        </span>
+        <span class="text-sm font-medium text-zinc-200">
+          Highest Severity: <strong class="uppercase text-white">{{ top_sev }}</strong>
+        </span>
+      </div>
+
+      <div class="flex items-center gap-2 text-xs text-zinc-400">
+        <span id="alerts-toggle-text">Click to expand</span>
+        <span id="alerts-toggle-icon" class="transition-transform duration-200">▼</span>
+      </div>
+    </div>
+
+    <!-- 具体警告列表（默认 hidden 折叠隐藏，点击头部栏才展开） -->
+    <div id="alerts-list" class="space-y-3 pt-1 hidden">
+      {% for a in unique_alerts %}
+        <div id="alert-card-{{ a.astronaut_id }}-{{ a.metric }}"
+             class="metric-card p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4
+          {% if a.severity == 'critical' %} alert-critical
+          {% elif a.severity == 'warning' %} border-amber-500/50
+          {% else %} border-sky-500/40 {% endif %}">
+          
+          <div class="flex items-start gap-3">
+            <span class="px-2.5 py-1 rounded-full text-xs font-bold uppercase tracking-wider
+              {% if a.severity == 'critical' %} bg-rose-500 text-white
+              {% elif a.severity == 'warning' %} bg-amber-400 text-black
+              {% else %} bg-sky-400 text-black {% endif %}">
+              {{ a.severity }}
+            </span>
+            <div>
+              <div class="text-sm font-semibold text-white">
+                {{ a.astronaut_id }} · <span class="uppercase text-zinc-300">{{ a.metric }}</span>
+              </div>
+              <div class="text-sm text-zinc-300 mt-0.5">{{ a.message }}</div>
+              <div class="text-xs text-zinc-500 mt-1">{{ a.timestamp.strftime('%H:%M:%S') }}</div>
+            </div>
           </div>
-        {% endif %}
+
+          <button type="button"
+                  onclick="acknowledgeAlertGroup('{{ a.astronaut_id }}', '{{ a.metric }}', {{ a.id }}, this)"
+                  class="px-4 py-2 rounded-full bg-white/10 hover:bg-white/20 text-xs font-medium text-white transition shrink-0">
+            Acknowledge
+          </button>
+        </div>
       {% endfor %}
     </div>
   {% else %}
