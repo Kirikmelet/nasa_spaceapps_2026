@@ -1,39 +1,105 @@
 <div class="space-y-3">
-  <h2 class="text-lg font-semibold text-zinc-200 px-2 flex items-center gap-2">
-    <span>🔔</span> Active Health Alerts
-  </h2>
+  <div class="flex items-center justify-between px-2">
+    <h2 class="text-lg font-semibold text-zinc-200 flex items-center gap-2">
+      <span>🔔</span> Active Health Alerts
+      {% if alerts %}
+        <span class="px-2.5 py-0.5 text-xs font-bold rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/30">
+          {{ alerts|length }}
+        </span>
+      {% endif %}
+    </h2>
+
+    {% if alerts|length > 1 %}
+      <button id="toggle-alerts-btn"
+              onclick="toggleAlertsStack()"
+              class="text-xs font-semibold text-sky-400 hover:text-sky-300 bg-white/5 hover:bg-white/10 px-3 py-1.5 rounded-full border border-white/10 transition">
+        Show All ({{ alerts|length }}) ▼
+      </button>
+    {% endif %}
+  </div>
 
   {% if alerts %}
-    <div class="space-y-3">
-      {% for a in alerts %}
-      <div class="metric-card p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4
-        {% if a.severity == 'critical' %} alert-critical
-        {% elif a.severity == 'warning' %} border-amber-500/50
+    {% set top = alerts[0] %}
+    <div class="relative">
+      
+      <!-- Top Alert Card (Always Visible) -->
+      <div onclick="if(event.target.tagName !== 'BUTTON') toggleAlertsStack()"
+           class="metric-card p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 relative z-20 cursor-pointer
+        {% if top.severity == 'critical' %} alert-critical
+        {% elif top.severity == 'warning' %} border-amber-500/50
         {% else %} border-sky-500/40 {% endif %}">
         
         <div class="flex items-start gap-3">
           <span class="px-2.5 py-1 rounded-full text-xs font-bold uppercase tracking-wider
-            {% if a.severity == 'critical' %} bg-rose-500 text-white
-            {% elif a.severity == 'warning' %} bg-amber-400 text-black
+            {% if top.severity == 'critical' %} bg-rose-500 text-white
+            {% elif top.severity == 'warning' %} bg-amber-400 text-black
             {% else %} bg-sky-400 text-black {% endif %}">
-            {{ a.severity }}
+            {{ top.severity }}
           </span>
           <div>
             <div class="text-sm font-semibold text-white">
-              {{ a.astronaut_id }} · <span class="uppercase text-zinc-300">{{ a.metric }}</span>
+              {{ top.astronaut_id }} · <span class="uppercase text-zinc-300">{{ top.metric }}</span>
+              {% if alerts|length > 1 %}
+                <span id="stack-hint" class="ml-2 text-xs font-normal text-zinc-400">(+{{ alerts|length - 1 }} more stacked · Click to expand)</span>
+              {% endif %}
             </div>
-            <div class="text-sm text-zinc-300 mt-0.5">{{ a.message }}</div>
-            <div class="text-xs text-zinc-500 mt-1">{{ a.timestamp.strftime('%H:%M:%S') }}</div>
+            <div class="text-sm text-zinc-300 mt-0.5">{{ top.message }}</div>
+            <div class="text-xs text-zinc-500 mt-1">{{ top.timestamp.strftime('%H:%M:%S') }}</div>
           </div>
         </div>
 
-        <button hx-post="/alerts/{{ a.id }}/acknowledge"
+        <button hx-post="/alerts/{{ top.id }}/acknowledge"
                 hx-swap="none"
                 class="px-4 py-2 rounded-full bg-white/10 hover:bg-white/20 text-xs font-medium text-white transition shrink-0">
           Acknowledge
         </button>
       </div>
-      {% endfor %}
+
+      <!-- Stacked Deck Illusion (Visible only when collapsed) -->
+      {% if alerts|length > 1 %}
+        <div id="alerts-stack-deco" onclick="toggleAlertsStack()" class="cursor-pointer">
+          <div class="mx-3 h-3 rounded-b-2xl bg-zinc-800/80 border-x border-b border-white/10 -mt-1 relative z-10 transition-all"></div>
+          {% if alerts|length > 2 %}
+            <div class="mx-6 h-2.5 rounded-b-2xl bg-zinc-900/70 border-x border-b border-white/5 -mt-1 relative z-0 transition-all"></div>
+          {% endif %}
+        </div>
+      {% endif %}
+
+      <!-- Remaining Alerts (Hidden by default until expanded) -->
+      {% if alerts|length > 1 %}
+        <div id="alerts-expanded-list" class="hidden space-y-3 mt-3">
+          {% for a in alerts[1:] %}
+          <div class="metric-card p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4
+            {% if a.severity == 'critical' %} alert-critical
+            {% elif a.severity == 'warning' %} border-amber-500/50
+            {% else %} border-sky-500/40 {% endif %}">
+            
+            <div class="flex items-start gap-3">
+              <span class="px-2.5 py-1 rounded-full text-xs font-bold uppercase tracking-wider
+                {% if a.severity == 'critical' %} bg-rose-500 text-white
+                {% elif a.severity == 'warning' %} bg-amber-400 text-black
+                {% else %} bg-sky-400 text-black {% endif %}">
+                {{ a.severity }}
+              </span>
+              <div>
+                <div class="text-sm font-semibold text-white">
+                  {{ a.astronaut_id }} · <span class="uppercase text-zinc-300">{{ a.metric }}</span>
+                </div>
+                <div class="text-sm text-zinc-300 mt-0.5">{{ a.message }}</div>
+                <div class="text-xs text-zinc-500 mt-1">{{ a.timestamp.strftime('%H:%M:%S') }}</div>
+              </div>
+            </div>
+
+            <button hx-post="/alerts/{{ a.id }}/acknowledge"
+                    hx-swap="none"
+                    class="px-4 py-2 rounded-full bg-white/10 hover:bg-white/20 text-xs font-medium text-white transition shrink-0">
+              Acknowledge
+            </button>
+          </div>
+          {% endfor %}
+        </div>
+      {% endif %}
+
     </div>
   {% else %}
     <div class="metric-card p-5 flex items-center gap-3 text-emerald-400 text-sm">
