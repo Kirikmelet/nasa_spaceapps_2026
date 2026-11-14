@@ -15,7 +15,7 @@ body.dashboard-bg {
     -webkit-backdrop-filter: blur(20px);
     border-radius: 24px;
     border: 1px solid rgba(255, 255, 255, 0.08);
-    transition: transform 0.2s ease, border-color 0.2s ease;
+    transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .metric-card:hover {
@@ -23,38 +23,8 @@ body.dashboard-bg {
     border-color: rgba(255, 255, 255, 0.18);
 }
 
-/* Critical Alert Pulse Effect */
-@keyframes pulse-critical {
-    0%, 100% { box-shadow: 0 0 0 0 rgba(255, 59, 48, 0.4); }
-    50% { box-shadow: 0 0 18px 4px rgba(255, 59, 48, 0.2); }
-}
-
+/* Critical Alert Steady Glow (prevents animation reset flicker on HTMX refresh) */
 .alert-critical {
-    border-color: rgba(255, 59, 48, 0.6);
-    animation: pulse-critical 2s infinite;
-}
-
-/* --- Persistent Stacked Alerts State (Immune to HTMX 3s refresh) --- */
-#alerts-expanded-list {
-    display: none;
-}
-.btn-text-collapse {
-    display: none;
-}
-
-body.alerts-open #alerts-expanded-list {
-    display: block !important;
-}
-body.alerts-open #alerts-stack-deco,
-body.alerts-open #stack-hint,
-body.alerts-open .btn-text-expand {
-    display: none !important;
-}
-body.alerts-open .btn-text-collapse {
-    display: inline !important;
-}
-
-.alert-critical {
-    border-color: rgba(255, 59, 48, 0.6);
-    animation: pulse-critical 2s infinite;
+    border-color: rgba(255, 59, 48, 0.75);
+    box-shadow: 0 0 16px 2px rgba(255, 59, 48, 0.25);
 }
