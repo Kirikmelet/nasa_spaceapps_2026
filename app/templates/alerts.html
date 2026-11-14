@@ -4,7 +4,6 @@
   </h2>
 
   {% if alerts %}
-    {# 按 (astronaut_id, metric) 去重 #}
     {% set seen = [] %}
     {% set unique_alerts = [] %}
     {% for a in alerts %}
@@ -17,7 +16,7 @@
 
     {% set top_sev = unique_alerts[0].severity %}
 
-    <!-- 可点击的折叠/展开头部栏 -->
+  
     <div id="alerts-summary-bar"
          onclick="toggleAlertsPanel()"
          class="metric-card p-4 flex items-center justify-between cursor-pointer select-none hover:bg-white/5 transition
