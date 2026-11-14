@@ -1,0 +1,44 @@
+<div class="space-y-3">
+  <h2 class="text-lg font-semibold text-zinc-200 px-2 flex items-center gap-2">
+    <span>🔔</span> Active Health Alerts
+  </h2>
+
+  {% if alerts %}
+    <div class="space-y-3">
+      {% for a in alerts %}
+      <div class="metric-card p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4
+        {% if a.severity == 'critical' %} alert-critical
+        {% elif a.severity == 'warning' %} border-amber-500/50
+        {% else %} border-sky-500/40 {% endif %}">
+        
+        <div class="flex items-start gap-3">
+          <span class="px-2.5 py-1 rounded-full text-xs font-bold uppercase tracking-wider
+            {% if a.severity == 'critical' %} bg-rose-500 text-white
+            {% elif a.severity == 'warning' %} bg-amber-400 text-black
+            {% else %} bg-sky-400 text-black {% endif %}">
+            {{ a.severity }}
+          </span>
+          <div>
+            <div class="text-sm font-semibold text-white">
+              {{ a.astronaut_id }} · <span class="uppercase text-zinc-300">{{ a.metric }}</span>
+            </div>
+            <div class="text-sm text-zinc-300 mt-0.5">{{ a.message }}</div>
+            <div class="text-xs text-zinc-500 mt-1">{{ a.timestamp.strftime('%H:%M:%S') }}</div>
+          </div>
+        </div>
+
+        <button hx-post="/alerts/{{ a.id }}/acknowledge"
+                hx-swap="none"
+                class="px-4 py-2 rounded-full bg-white/10 hover:bg-white/20 text-xs font-medium text-white transition shrink-0">
+          Acknowledge
+        </button>
+      </div>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="metric-card p-5 flex items-center gap-3 text-emerald-400 text-sm">
+      <span>✅</span>
+      <span>All crew vital signs are within nominal parameters. No active alerts.</span>
+    </div>
+  {% endif %}
+</div>
