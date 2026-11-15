@@ -179,7 +179,6 @@ python -m pytest
 - There are two sets of ranges: the engine's limits, and the "Normal" ranges shown on the vitals cards (from `NASA_DATA` in `app/models.py`). They don't fully match. Next step: one shared, sourced reference table.
 - Storage is in memory and resets on restart. A SQLite layer (`app/db.py`) is started but not connected yet.
 - Use real data sources (wearables or analog-mission datasets) instead of simulation.
-- Plain-language alert messages for non-engineers.
 - Astronaut self-reported symptoms as additional alert context.
 
 ## Project layout
