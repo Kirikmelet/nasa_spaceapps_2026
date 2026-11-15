@@ -159,7 +159,7 @@ class _MainAppState extends State<MainApp> with WidgetsBindingObserver {
 
   final List<BottomNavigationBarItem> _bottomBarList = const [
     BottomNavigationBarItem(icon: Icon(Icons.home), label: "Home"),
-    BottomNavigationBarItem(icon: Icon(Icons.sunny), label: "Mental Help"),
+    BottomNavigationBarItem(icon: Icon(Icons.sunny), label: "Wellness Insight"),
     BottomNavigationBarItem(icon: Icon(Icons.settings), label: "Settings"),
   ];
 

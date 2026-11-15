@@ -63,6 +63,9 @@ IMPORTANT SAFETY RULES:
 
 The application is educational and experimental. Your response is not
 a substitute for medical evaluation.
+
+Keep it brief: summary under 60 words, at most 4 items in each list,
+each item under 25 words. Never repeat a phrase.
 """
 
 
@@ -76,7 +79,7 @@ Analyze the following recent physiological readings for astronaut
 
 Readings are supplied as JSON:
 
-    {json.dumps(readings, indent=2)}
+    {json.dumps(readings, separators=(",", ":"))}
 
 Provide:
 1. A concise summary.
@@ -97,7 +100,7 @@ Do not infer psychological conditions from physiological readings.
                 response_mime_type="application/json",
                 response_schema=WellnessResponse,
                 temperature=0.2,
-                max_output_tokens=1200,
+                max_output_tokens=8192,
             ),
         )
 

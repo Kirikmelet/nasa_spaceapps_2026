@@ -33,17 +33,39 @@
 
         <section id="alerts-section"
                  hx-get="/partials/alerts"
-          hx-trigger="load, every 1s"
-	  hx-sync="this:replace"
+          hx-trigger="load, every 3s"
+	  hx-sync="this:drop"
                  hx-swap="innerMorph">
           <div class="metric-card placeholder">Loading health alerts...</div>
         </section>
 
         <section id="vitals-section"
                  hx-get="/partials/vitals"
-                 hx-trigger="load, every 1s"
+                 hx-trigger="load, every 3s"
                  hx-swap="innerMorph">
           <div class="metric-card placeholder">Loading vital signs telemetry...</div>
+        </section>
+	
+	<section id="insight-bar" class="metric-card insight-bar">
+          <div class="insight-controls">
+            <select name="astronaut_id" class="insight-select"
+                    hx-get="/partials/astronaut-options"
+                    hx-trigger="load"
+                    hx-swap="innerHTML">
+              <option value="">Loading crew...</option>
+            </select>
+
+            <button type="button" class="btn-insight"
+                    hx-post="/partials/insight"
+                    hx-include="#insight-bar [name='astronaut_id']"
+                    hx-target="#insight-output"
+                    hx-swap="innerHTML"
+                    hx-disabled-elt="this">
+              Analyze
+            </button>
+          </div>
+
+          <div id="insight-output" class="insight-output"></div>
         </section>
       </main>
 
@@ -53,7 +75,7 @@
           <div id="alert-log"
                class="log-panel-body"
                hx-get="/partials/alert-log"
-               hx-trigger="load, every 1s"
+               hx-trigger="load, every 3s"
                hx-swap="innerMorph">
             <p class="log-empty">Loading log...</p>
           </div>

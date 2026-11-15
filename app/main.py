@@ -1,15 +1,16 @@
 from fastapi.middleware.cors import CORSMiddleware
 from app.models import Alert, Reading, User
+import html
 from app.db import DbInstance
-from app.ai import router as AIRouter
-from app.ai import analyze_readings
+from app.ai_deepseek import router as AIRouter
+from app.ai_deepseek import analyze_readings
 import time
 from app.status import classify
 from app.alert_engine import RANK, AlertEngine, AlertEvent, METRIC_INFO
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import RedirectResponse, FileResponse
-from fastapi import FastAPI, Request, HTTPException
+from fastapi.responses import RedirectResponse, FileResponse, HTMLResponse
+from fastapi import FastAPI, Request, HTTPException, Form
 import threading
 from datetime import datetime
 from typing import Optional, List
@@ -27,7 +28,7 @@ lock = threading.Lock()  # FastAPI runs plain def routes in a thread pool
 
 # Help Functions
 
-app.add_middleware(CORSMiddleware, allow_origins=["http://localhost:5000"],
+app.add_middleware(CORSMiddleware, allow_origins=["http://localhost:8000"],
                    allow_methods=["*"], allow_headers=["*"])
 
 
@@ -231,6 +232,18 @@ def acknowledge_group(request: Request, astronaut_id: str, metric: str):
 #     return templates.TemplateResponse(request, "alerts.html", {"alerts": active})
 
 
+@app.get("/partials/astronaut-options", response_class=HTMLResponse)
+def astronaut_options():
+    with lock:
+        roster = DbInstance.get_name_map()
+        ids = {r.astronaut_id for r in DbInstance.get_latest_readings()
+               } | set(roster)
+    return "".join(
+        f'<option value="{html.escape(i)}">{html.escape(roster.get(i, i))}</option>'
+        for i in sorted(ids)
+    ) or '<option value="">No crew yet</option>'
+
+
 @app.get("/partials/alerts")
 def alerts_partial(request: Request):
     with lock:
@@ -251,28 +264,39 @@ _insight_cache: dict[str, tuple[float, object, datetime]] = {}
 
 
 @app.post("/partials/insight")
-def insight_partial(request: Request, astronaut_id: str):
+def insight_partial(request: Request, astronaut_id: str = Form(default="")):
+    astronaut_id = astronaut_id.strip()
+    if not astronaut_id:
+        return templates.TemplateResponse(
+            request, "insight.html",
+            {"error": True, "message": "Pick an astronaut first."})
+
     now = time.time()
     hit = _insight_cache.get(astronaut_id)
-    if hit and now - hit[0] < INSIGHT_COOLDOWN:          # protects your quota
+    if hit and now - hit[0] < INSIGHT_COOLDOWN:      # protects your Gemini quota
         _, result, at = hit
         cached = True
     else:
         try:
             with lock:
                 readings = DbInstance.get_readings(astronaut_id, limit=60)
-            data = [r.model_dump(mode="json", exclude={
-                                 "id", "origin_id"}) for r in readings]
+            if not readings:
+                return templates.TemplateResponse(
+                    request, "insight.html",
+                    {"error": True, "message": "No readings for this astronaut yet."})
+
+            data = [r.model_dump(mode="json", exclude={"id", "origin_id"})
+                    for r in readings]
             result = analyze_readings(astronaut_id, data)
             at, cached = datetime.now(), False
             _insight_cache[astronaut_id] = (now, result, at)
-        except Exception:
-            # full error in the terminal, generic text in the UI
-            print("insight failed")
-            return templates.TemplateResponse(request, "insight.html", {"error": True})
+        except Exception as e:
+            return templates.TemplateResponse(
+                request, "insight.html", {"error": True, "message": str(e)})
 
-    return templates.TemplateResponse(request, "insight.html",
-                                      {"result": result, "generated_at": at, "cached": cached, "error": False})
+    return templates.TemplateResponse(
+        request, "insight.html",
+        {"result": result, "generated_at": at, "cached": cached, "error": False})
 
 
 @app.get("/partials/vitals")

@@ -1,24 +1,23 @@
-
 import 'package:material_ui/material_ui.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'astro_api.dart';
 import 'api.dart';
 
 class MentalWellnessPage extends StatefulWidget {
-  const MentalWellnessPage({
-    super.key,
-    this.astronautId = 'astro_1',
-  });
+  const MentalWellnessPage({super.key, this.astronautId = 'astro_1'});
 
   final String astronautId;
 
   @override
-  State<MentalWellnessPage> createState() =>
-      _MentalWellnessPageState();
+  State<MentalWellnessPage> createState() => _MentalWellnessPageState();
 }
 
 class _MentalWellnessPageState extends State<MentalWellnessPage> {
   Map<String, dynamic>? _analysis;
+
+  String _astronautId = 'astro_1';
+  bool _settingsLoaded = false;
 
   bool _loading = false;
   String? _error;
@@ -26,70 +25,88 @@ class _MentalWellnessPageState extends State<MentalWellnessPage> {
   int _readingCount = 0;
   DateTime? _analysisTime;
 
+  @override
+  void initState() {
+    super.initState();
+    _loadSettings();
+  }
 
-Future<void> _analyze() async {
-  if (_loading) return;
-
-  setState(() {
-    _loading = true;
-    _error = null;
-  });
-
-  try {
-    final fetched = await api.getVitals(
-      widget.astronautId,
-      limit: 5000,
-    );
-
-    // Keep only readings belonging to this astronaut with valid
-    // finite numeric measurements.
-    final validReadings = fetched.where((r) {
-      return r.astronautId == widget.astronautId &&
-          r.hr.isFinite &&
-          r.spo2.isFinite &&
-          r.temp.isFinite &&
-          r.bpSys.isFinite &&
-          r.bpDia.isFinite &&
-          r.resp.isFinite;
-    }).toList();
-
-    // Sort newest first, then retain at most 100.
-    validReadings.sort(
-      (a, b) => b.timestamp.compareTo(a.timestamp),
-    );
-
-    final selectedReadings = validReadings.take(100).toList();
-
-    if (selectedReadings.isEmpty) {
-      throw Exception('No valid vital readings are available.');
-    }
-
-    final result = await api.analyzeWellness(
-      widget.astronautId,
-      selectedReadings,
-    );
+  Future<void> _loadSettings() async {
+    final prefs = await SharedPreferences.getInstance();
 
     if (!mounted) return;
 
     setState(() {
-      _analysis = result;
-      _readingCount = selectedReadings.length;
-      _analysisTime = DateTime.now();
+      _astronautId = prefs.getString('astronaut_id') ?? widget.astronautId;
+      _settingsLoaded = true;
     });
-  } catch (e) {
-    if (!mounted) return;
+  }
+
+  Future<void> _analyze() async {
+    if (_loading || !_settingsLoaded) return;
 
     setState(() {
-      _error = 'Unable to generate wellness insights: $e';
+      _loading = true;
+      _error = null;
     });
-  } finally {
-    if (mounted) {
+
+    try {
+      // Always retrieve the latest saved astronaut ID.
+      final prefs = await SharedPreferences.getInstance();
+
+      final astronautId = prefs.getString('astronaut_id') ?? widget.astronautId;
+
+      if (!mounted) return;
+
       setState(() {
-        _loading = false;
+        _astronautId = astronautId;
       });
+
+      final fetched = await api.getVitals(astronautId, limit: 5000);
+
+      final validReadings = fetched.where((r) {
+        return r.astronautId == astronautId &&
+            r.hr.isFinite &&
+            r.spo2.isFinite &&
+            r.temp.isFinite &&
+            r.bpSys.isFinite &&
+            r.bpDia.isFinite &&
+            r.resp.isFinite;
+      }).toList();
+
+      validReadings.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+
+      final selectedReadings = validReadings.take(100).toList();
+
+      if (selectedReadings.isEmpty) {
+        throw Exception(
+          'No valid vital readings are available for $astronautId.',
+        );
+      }
+
+      final result = await api.analyzeWellness(astronautId, selectedReadings);
+
+      if (!mounted) return;
+
+      setState(() {
+        _analysis = result;
+        _readingCount = selectedReadings.length;
+        _analysisTime = DateTime.now();
+      });
+    } catch (e) {
+      if (!mounted) return;
+
+      setState(() {
+        _error = 'Unable to generate wellness insights: $e';
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _loading = false;
+        });
+      }
     }
   }
-}
 
   Color _urgencyColor(String urgency) {
     switch (urgency.toLowerCase()) {
@@ -156,11 +173,7 @@ Future<void> _analyze() async {
                     children: [
                       Padding(
                         padding: const EdgeInsets.only(top: 6),
-                        child: Icon(
-                          Icons.circle,
-                          size: 7,
-                          color: color,
-                        ),
+                        child: Icon(Icons.circle, size: 7, color: color),
                       ),
                       const SizedBox(width: 10),
                       Expanded(
@@ -228,11 +241,7 @@ Future<void> _analyze() async {
               children: [
                 Row(
                   children: [
-                    Icon(
-                      _urgencyIcon(urgency),
-                      color: color,
-                      size: 30,
-                    ),
+                    Icon(_urgencyIcon(urgency), color: color, size: 30),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Text(
@@ -247,8 +256,7 @@ Future<void> _analyze() async {
                 ),
                 const SizedBox(height: 16),
                 Text(
-                  result['summary']?.toString() ??
-                      'No summary provided.',
+                  result['summary']?.toString() ?? 'No summary provided.',
                   style: theme.textTheme.bodyLarge,
                 ),
               ],
@@ -270,18 +278,14 @@ Future<void> _analyze() async {
         _section(
           title: 'Wellness Guidance',
           icon: Icons.self_improvement,
-          items: result['guidance'] is List
-              ? result['guidance'] as List
-              : [],
+          items: result['guidance'] is List ? result['guidance'] as List : [],
           color: Colors.green,
         ),
 
         _section(
           title: 'Warnings',
           icon: Icons.warning_amber_rounded,
-          items: result['warnings'] is List
-              ? result['warnings'] as List
-              : [],
+          items: result['warnings'] is List ? result['warnings'] as List : [],
           color: Colors.orange,
         ),
 
@@ -303,9 +307,7 @@ Future<void> _analyze() async {
                   'Data window: ${result['data_window'] ?? 'Not specified'}',
                 ),
                 if (_analysisTime != null)
-                  Text(
-                    'Generated: ${_analysisTime!.toLocal()}',
-                  ),
+                  Text('Generated: ${_analysisTime!.toLocal()}'),
               ],
             ),
           ),
@@ -319,9 +321,7 @@ Future<void> _analyze() async {
     final theme = Theme.of(context);
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Mental Wellness'),
-      ),
+      appBar: AppBar(title: const Text('Wellness Insight')),
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.all(16),
@@ -362,7 +362,9 @@ Future<void> _analyze() async {
                     SizedBox(
                       width: double.infinity,
                       child: FilledButton.icon(
-                        onPressed: _loading ? null : _analyze,
+                        onPressed: (_loading || !_settingsLoaded)
+                            ? null
+                            : _analyze,
                         icon: _loading
                             ? const SizedBox(
                                 height: 18,
@@ -393,9 +395,7 @@ Future<void> _analyze() async {
                   padding: const EdgeInsets.all(16),
                   child: Text(
                     _error!,
-                    style: TextStyle(
-                      color: theme.colorScheme.onErrorContainer,
-                    ),
+                    style: TextStyle(color: theme.colorScheme.onErrorContainer),
                   ),
                 ),
               ),
@@ -415,16 +415,11 @@ Future<void> _analyze() async {
                   padding: EdgeInsets.all(24),
                   child: Column(
                     children: [
-                      Icon(
-                        Icons.monitor_heart_outlined,
-                        size: 48,
-                      ),
+                      Icon(Icons.monitor_heart_outlined, size: 48),
                       SizedBox(height: 12),
                       Text(
                         'No analysis generated yet',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                        ),
+                        style: TextStyle(fontWeight: FontWeight.bold),
                       ),
                       SizedBox(height: 6),
                       Text(

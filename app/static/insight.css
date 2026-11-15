@@ -26,3 +26,49 @@
 .urgency-pill--normal    { color: #6ee7b7; background: rgba(16,185,129,.2); border-color: rgba(16,185,129,.3); }
 .urgency-pill--attention { color: #fcd34d; background: rgba(245,158,11,.2); border-color: rgba(245,158,11,.3); }
 .urgency-pill--urgent    { color: #fda4af; background: rgba(244,63,94,.2);  border-color: rgba(244,63,94,.3); }
+
+.insight-bar      { padding: 1rem; }
+.insight-controls { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center; }
+
+.insight-select {
+  padding: 0.5rem 0.75rem; font: inherit; font-size: 0.875rem;
+  color: var(--text); background: var(--fill-hover);
+  border: 1px solid var(--line); border-radius: 9999px;
+}
+
+.btn-insight {
+  padding: 0.5rem 1.25rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #000;
+  background: var(--accent);
+  border: 0;
+  border-radius: 9999px;
+  cursor: pointer;
+  transition: filter 0.15s ease, transform 0.1s ease, box-shadow 0.15s ease;
+}
+
+.btn-insight:hover:not(:disabled) {
+  filter: brightness(1.12);
+  box-shadow: 0 0 14px rgba(56, 189, 248, 0.35);   /* soft glow in the accent color */
+}
+
+.btn-insight:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.btn-insight:focus-visible {
+  outline: 2px solid var(--text);
+  outline-offset: 2px;
+}
+
+.btn-insight:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+
+/* Optional: pulse while the request is running (htmx adds this class during a request) */
+.btn-insight.htmx-request {
+  animation: insight-pulse 1s ease-in-out infinite;
+}
+@keyframes insight-pulse { 50% { opacity: 0.35; } }
