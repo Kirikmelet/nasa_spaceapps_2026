@@ -91,6 +91,15 @@ def vitals_partial(request: Request):
         cards = sorted(latest.values(), key=lambda r: r.astronaut_id)
     return templates.TemplateResponse(request, "vitals.html", {"cards": cards})
 
+@app.get("/partials/alert-log")
+def alert_log_partial(request: Request, severity: Optional[str] = None):
+    with lock:
+        snapshot = alerts[-500:]  # cap the scan so it stays cheap every 3s
+    groups = collapse_log(snapshot)
+    if severity:
+        groups = [g for g in groups if g["severity"] == severity]
+    return templates.TemplateResponse(request, "alert-log.html", {"groups": groups})
+
 
 # ---------- Page and redirect ----------
 
@@ -98,5 +107,36 @@ def vitals_partial(request: Request):
 def root():
     return RedirectResponse("/dashboard/")
 
+def collapse_log(snapshot: list[Alert], limit: int = 100) -> list[dict]:
+    groups: list[dict] = []
+    open_group: dict[tuple, dict] = {}  # (astronaut, metric) -> latest group
+
+    for a in snapshot:  # chronological order
+        key = (a.astronaut_id, a.metric)
+        g = open_group.get(key)
+
+        # extend the group if same severity, and not a fresh alert after an ack
+        if g and g["severity"] == a.severity and not (g["acknowledged"] and not a.acknowledged):
+            g["count"] += 1
+            g["last_ts"] = a.timestamp
+            g["message"] = a.message
+            g["acknowledged"] = g["acknowledged"] and a.acknowledged
+        else:
+            g = {
+                "id": a.id,  # first alert's id = stable DOM id for morphing
+                "astronaut_id": a.astronaut_id,
+                "metric": a.metric,
+                "severity": a.severity,
+                "message": a.message,
+                "first_ts": a.timestamp,
+                "last_ts": a.timestamp,
+                "count": 1,
+                "acknowledged": a.acknowledged,
+            }
+            groups.append(g)
+            open_group[key] = g
+
+    groups.reverse()  # newest first
+    return groups[:limit]
 
 app.mount("/dashboard", StaticFiles(directory="app/static", html=True), name="dashboard")
