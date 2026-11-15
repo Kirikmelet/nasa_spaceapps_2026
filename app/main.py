@@ -1,5 +1,9 @@
+from fastapi.middleware.cors import CORSMiddleware
 from app.models import Alert, Reading, User
 from app.db import DbInstance
+from app.ai import router as AIRouter
+from app.ai import analyze_readings
+import time
 from app.status import classify
 from app.alert_engine import RANK, AlertEngine, AlertEvent, METRIC_INFO
 from fastapi.templating import Jinja2Templates
@@ -7,6 +11,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import RedirectResponse, FileResponse
 from fastapi import FastAPI, Request, HTTPException
 import threading
+from datetime import datetime
 from typing import Optional, List
 from pydantic import BaseModel
 
@@ -22,10 +27,14 @@ lock = threading.Lock()  # FastAPI runs plain def routes in a thread pool
 
 # Help Functions
 
+app.add_middleware(CORSMiddleware, allow_origins=["http://localhost:5000"],
+                   allow_methods=["*"], allow_headers=["*"])
+
 
 def names() -> dict[str, str]:
     with lock:
         return DbInstance.get_name_map()
+
 
 def one_per_metric(alerts):
     seen, out = set(), []
@@ -170,7 +179,7 @@ def get_alerts(severity: Optional[str] = None) -> List[Alert]:
     #     return list(alerts)
     alerts: List[Alert] = []
     with lock:
-        alerts = DbInstance.get_alerts(severity=severity)
+        alerts = DbInstance.get_alerts(None, severity=severity)
     return alerts
 
 
@@ -235,6 +244,35 @@ def alerts_partial(request: Request):
 #     alerts.sort(key=lambda a: (-RANK[a.severity], -a.id))
 #     return templates.TemplateResponse(request, "alerts.html",
 #                                       {"alerts": alerts})
+
+
+INSIGHT_COOLDOWN = 30
+_insight_cache: dict[str, tuple[float, object, datetime]] = {}
+
+
+@app.post("/partials/insight")
+def insight_partial(request: Request, astronaut_id: str):
+    now = time.time()
+    hit = _insight_cache.get(astronaut_id)
+    if hit and now - hit[0] < INSIGHT_COOLDOWN:          # protects your quota
+        _, result, at = hit
+        cached = True
+    else:
+        try:
+            with lock:
+                readings = DbInstance.get_readings(astronaut_id, limit=60)
+            data = [r.model_dump(mode="json", exclude={
+                                 "id", "origin_id"}) for r in readings]
+            result = analyze_readings(astronaut_id, data)
+            at, cached = datetime.now(), False
+            _insight_cache[astronaut_id] = (now, result, at)
+        except Exception:
+            # full error in the terminal, generic text in the UI
+            print("insight failed")
+            return templates.TemplateResponse(request, "insight.html", {"error": True})
+
+    return templates.TemplateResponse(request, "insight.html",
+                                      {"result": result, "generated_at": at, "cached": cached, "error": False})
 
 
 @app.get("/partials/vitals")
@@ -316,6 +354,8 @@ def get_favicon():
 def root():
     return RedirectResponse("/dashboard/")
 
+
+app.include_router(AIRouter)
 
 app.mount("/dashboard", StaticFiles(directory="app/static",
           html=True), name="dashboard")

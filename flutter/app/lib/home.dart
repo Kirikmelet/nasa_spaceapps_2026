@@ -1,0 +1,745 @@
+import 'dart:async';
+
+import 'package:material_ui/material_ui.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import 'astro_api.dart';
+import 'api.dart';
+import "local_avatar.dart";
+
+class VitalSpec {
+  const VitalSpec(this.label, this.unit, this.icon, this.decimals, this.read);
+
+  final String label;
+  final String unit;
+  final IconData icon;
+  final int decimals;
+  final double Function(Reading) read;
+}
+
+final vitalSpecs = <VitalSpec>[
+  VitalSpec('Heart Rate', 'BPM', Icons.favorite, 0, (r) => r.hr),
+  VitalSpec('Blood Oxygen', '%', Icons.water_drop, 1, (r) => r.spo2),
+  VitalSpec('Body Temperature', '°C', Icons.thermostat, 1, (r) => r.temp),
+  VitalSpec('Systolic BP', 'mmHg', Icons.bloodtype, 0, (r) => r.bpSys),
+  VitalSpec('Diastolic BP', 'mmHg', Icons.monitor_heart, 0, (r) => r.bpDia),
+  VitalSpec('Respiratory Rate', 'br/min', Icons.air, 1, (r) => r.resp),
+];
+
+class HomeWidget extends StatefulWidget {
+  const HomeWidget({super.key});
+
+  @override
+  State<HomeWidget> createState() => _HomeWidgetState();
+}
+
+class _HomeWidgetState extends State<HomeWidget> {
+  String _astronautId = 'astro_1';
+
+  User? _user;
+  Reading? _latest;
+  List<Alert> _alerts = [];
+
+List<Alert> _alertHistory = [];
+
+  Object? _error;
+  Timer? _timer;
+
+  bool _isLoading = false;
+  bool _isAcknowledging = false;
+
+  @override
+  void initState() {
+    super.initState();
+
+    _load();
+
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) => _load());
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+
+Future<void> _load() async {
+  if (_isLoading) return;
+
+  _isLoading = true;
+
+  try {
+    // Read the currently configured astronaut ID.
+    final prefs = await SharedPreferences.getInstance();
+    final savedId = prefs.getString('astronaut_id')?.trim();
+
+    if (savedId != null &&
+        savedId.isNotEmpty &&
+        savedId != _astronautId) {
+      _astronautId = savedId;
+      _user = null;
+    }
+
+    final astronautId = _astronautId;
+
+    // Fetch the profile once per astronaut.
+    if (_user == null) {
+      final user = await api.getUser(astronautId);
+
+      if (!mounted) return;
+
+      setState(() => _user = user);
+    }
+
+    final results = await Future.wait([
+      api.getVitals(astronautId, limit: 10),
+      api.getAlerts(),
+    ]);
+
+    if (!mounted) return;
+
+    final readings = results[0] as List<Reading>;
+    final allAlerts = results[1] as List<Alert>;
+
+    Reading? newestReading;
+
+    for (final reading in readings) {
+      if (newestReading == null ||
+          reading.timestamp.isAfter(newestReading.timestamp)) {
+        newestReading = reading;
+      }
+    }
+
+    // Keep the complete alert history for this astronaut.
+    final alertHistory = allAlerts
+        .where((alert) => alert.astronautId == astronautId)
+        .toList();
+
+    alertHistory.sort(
+      (a, b) => b.timestamp.compareTo(a.timestamp),
+    );
+
+    // Only unacknowledged alerts appear in the prominent panel.
+    final activeAlerts = alertHistory
+        .where((alert) => !alert.acknowledged)
+        .toList();
+
+    activeAlerts.sort((a, b) {
+      final severityOrder = {
+        Severity.critical: 0,
+        Severity.warning: 1,
+        Severity.info: 2,
+      };
+
+      final comparison = severityOrder[a.severity]!
+          .compareTo(severityOrder[b.severity]!);
+
+      if (comparison != 0) return comparison;
+
+      return b.timestamp.compareTo(a.timestamp);
+    });
+
+    setState(() {
+      _latest = newestReading;
+      _alerts = activeAlerts;
+      _alertHistory = alertHistory;
+      _error = null;
+    });
+  } catch (e) {
+    if (mounted) {
+      setState(() => _error = e);
+    }
+  } finally {
+    _isLoading = false;
+  }
+}
+
+  Future<void> _acknowledge(Alert alert) async {
+    if (alert.id == null || _isAcknowledging) return;
+
+    setState(() => _isAcknowledging = true);
+
+    try {
+      await api.acknowledge(alert.id!);
+      await _load();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not acknowledge alert: $e')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isAcknowledging = false);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Scaffold(
+      body: SafeArea(
+        child: RefreshIndicator(
+          onRefresh: _load,
+          child: CustomScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            slivers: [
+              SliverPadding(
+                padding: const EdgeInsets.all(16),
+                sliver: SliverList(
+                  delegate: SliverChildListDelegate([
+                    // Welcome card
+                    WelcomeCard(user: _user, astronautId: _astronautId),
+
+                    const SizedBox(height: 20),
+
+                    // Alert panel
+                    if (_alerts.isNotEmpty) ...[
+                      AlertPanel(
+                        alerts: _alerts,
+                        onAcknowledge: _acknowledge,
+                        acknowledging: _isAcknowledging,
+                      ),
+                      const SizedBox(height: 24),
+                    ] else ...[
+                      AlertLogPanel(alerts: _alertHistory),
+                      const SizedBox(height: 24),
+                    ],
+                    
+
+                    // Vitals heading
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Vital Signs',
+                          style: theme.textTheme.titleLarge?.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        Text(
+                          _latest == null
+                              ? 'Waiting for data'
+                              : 'Live monitoring',
+                          style: theme.textTheme.bodySmall,
+                        ),
+                      ],
+                    ),
+
+                    const SizedBox(height: 12),
+
+                    if (_error != null && _latest == null)
+                      ErrorCard(error: _error.toString())
+                    else if (_latest == null)
+                      const Padding(
+                        padding: EdgeInsets.all(32),
+                        child: Center(child: CircularProgressIndicator()),
+                      )
+                    else
+                      LayoutBuilder(
+                        builder: (context, constraints) {
+                          final columns = constraints.maxWidth > 700 ? 3 : 2;
+
+                          return GridView.builder(
+                            shrinkWrap: true,
+                            physics: const NeverScrollableScrollPhysics(),
+                            gridDelegate:
+                                SliverGridDelegateWithFixedCrossAxisCount(
+                                  crossAxisCount: columns,
+                                  mainAxisSpacing: 12,
+                                  crossAxisSpacing: 12,
+                                  childAspectRatio: 1.2,
+                                ),
+                            itemCount: vitalSpecs.length,
+                            itemBuilder: (context, index) {
+                              return VitalCard(
+                                spec: vitalSpecs[index],
+                                reading: _latest!,
+                              );
+                            },
+                          );
+                        },
+                      ),
+
+                    if (_error != null && _latest != null) ...[
+                      const SizedBox(height: 12),
+                      Text(
+                        'Refresh failed: $_error',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.error,
+                        ),
+                      ),
+                    ],
+
+                    const SizedBox(height: 20),
+
+                    if (_latest != null)
+                      Text(
+                        'Last reading: ${_formatTimestamp(_latest!.timestamp)}',
+                        textAlign: TextAlign.center,
+                        style: theme.textTheme.bodySmall,
+                      ),
+                  ]),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ---------- welcome card ----------
+
+class WelcomeCard extends StatelessWidget {
+  const WelcomeCard({super.key, required this.user, required this.astronautId});
+
+  final User? user;
+  final String astronautId;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Card(
+      elevation: 2,
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Row(
+          children: [
+            CircleAvatar(
+              radius: 28,
+              backgroundColor: theme.colorScheme.primaryContainer,
+              child: const LocalAvatar(radius: 28)
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Welcome back,', style: theme.textTheme.bodyMedium),
+                  Text(
+                    user?.name ?? 'Astronaut',
+                    style: theme.textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Mission ID: $astronautId',
+                    style: theme.textTheme.bodySmall,
+                  ),
+                ],
+              ),
+            ),
+            Icon(
+              Icons.rocket_launch,
+              size: 30,
+              color: theme.colorScheme.primary,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ---------- alerts ----------
+
+class AlertPanel extends StatelessWidget {
+  const AlertPanel({
+    super.key,
+    required this.alerts,
+    required this.onAcknowledge,
+    required this.acknowledging,
+  });
+
+  final List<Alert> alerts;
+  final Future<void> Function(Alert) onAcknowledge;
+  final bool acknowledging;
+
+  Color _severityColor(Severity severity) {
+    switch (severity) {
+      case Severity.critical:
+        return Colors.red;
+      case Severity.warning:
+        return Colors.orange;
+      case Severity.info:
+        return Colors.blue;
+    }
+  }
+
+  IconData _severityIcon(Severity severity) {
+    switch (severity) {
+      case Severity.critical:
+        return Icons.dangerous;
+      case Severity.warning:
+        return Icons.warning_amber_rounded;
+      case Severity.info:
+        return Icons.info_outline;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final alert = alerts.first;
+    final color = _severityColor(alert.severity);
+
+    return Card(
+      elevation: 5,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: color, width: 2),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(_severityIcon(alert.severity), color: color, size: 30),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    alert.severity.name.toUpperCase(),
+                    style: theme.textTheme.titleLarge?.copyWith(
+                      color: color,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                if (alerts.length > 1)
+                  Chip(
+                    label: Text('${alerts.length} active'),
+                    backgroundColor: color.withValues(alpha: 0.15),
+                  ),
+              ],
+            ),
+
+            const SizedBox(height: 12),
+
+            Text(
+              alert.metric,
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+
+            const SizedBox(height: 6),
+
+            Text(alert.message, style: theme.textTheme.bodyLarge),
+
+            if (alert.value != null) ...[
+              const SizedBox(height: 8),
+              Text(
+                'Recorded value: ${alert.value}',
+                style: theme.textTheme.bodyMedium,
+              ),
+            ],
+
+            const SizedBox(height: 8),
+
+            Text(
+              'Reported: ${_formatTimestamp(alert.timestamp)}',
+              style: theme.textTheme.bodySmall,
+            ),
+
+            const SizedBox(height: 12),
+
+            Align(
+              alignment: Alignment.centerRight,
+              child: FilledButton.icon(
+                onPressed: acknowledging ? null : () => onAcknowledge(alert),
+                icon: const Icon(Icons.check),
+                label: const Text('Acknowledge'),
+              ),
+            ),
+
+            if (alerts.length > 1) ...[
+              const Divider(height: 24),
+              Text('Other active alerts', style: theme.textTheme.titleSmall),
+              const SizedBox(height: 8),
+              for (final other in alerts.skip(1))
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Row(
+                    children: [
+                      Icon(
+                        _severityIcon(other.severity),
+                        color: _severityColor(other.severity),
+                        size: 18,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          '${other.metric}: ${other.message}',
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class NoAlertCard extends StatelessWidget {
+  const NoAlertCard({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            Icon(Icons.check_circle_outline, color: Colors.green, size: 28),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Systems nominal',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  Text(
+                    'No active alerts detected.',
+                    style: theme.textTheme.bodySmall,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// AlertLogPanel
+
+
+class AlertLogPanel extends StatelessWidget {
+  const AlertLogPanel({
+    super.key,
+    required this.alerts,
+  });
+
+  final List<Alert> alerts;
+
+  Color _severityColor(Severity severity) {
+    switch (severity) {
+      case Severity.critical:
+        return Colors.red;
+      case Severity.warning:
+        return Colors.orange;
+      case Severity.info:
+        return Colors.blue;
+    }
+  }
+
+  IconData _severityIcon(Severity severity) {
+    switch (severity) {
+      case Severity.critical:
+        return Icons.dangerous;
+      case Severity.warning:
+        return Icons.warning_amber_rounded;
+      case Severity.info:
+        return Icons.info_outline;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Card(
+      child: ExpansionTile(
+        leading: const Icon(Icons.history),
+        title: Text(
+          'Alert Log',
+          style: theme.textTheme.titleMedium?.copyWith(
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        subtitle: Text('${alerts.length} recorded alerts'),
+        children: [
+          if (alerts.isEmpty)
+            const Padding(
+              padding: EdgeInsets.all(20),
+              child: Text('No alerts have been recorded.'),
+            )
+          else
+            for (final alert in alerts.take(50))
+              ListTile(
+                leading: Icon(
+                  _severityIcon(alert.severity),
+                  color: _severityColor(alert.severity),
+                ),
+                title: Text(
+                  alert.metric,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                subtitle: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(alert.message),
+                    const SizedBox(height: 4),
+                    Text(
+                      _formatTimestamp(alert.timestamp),
+                      style: theme.textTheme.bodySmall,
+                    ),
+                  ],
+                ),
+                trailing: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      alert.acknowledged
+                          ? Icons.check_circle
+                          : Icons.pending_actions,
+                      size: 18,
+                      color: alert.acknowledged
+                          ? Colors.green
+                          : Colors.orange,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      alert.acknowledged ? 'Acknowledged' : 'Active',
+                      style: theme.textTheme.labelSmall,
+                    ),
+                  ],
+                ),
+                isThreeLine: true,
+              ),
+          if (alerts.length > 50)
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: Text(
+                'Showing the 50 most recent alerts.',
+                style: theme.textTheme.bodySmall,
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+
+// ---------- vital cards ----------
+
+class VitalCard extends StatelessWidget {
+  const VitalCard({super.key, required this.spec, required this.reading});
+
+  final VitalSpec spec;
+  final Reading reading;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final value = spec.read(reading).toStringAsFixed(spec.decimals);
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Row(
+              children: [
+                Icon(spec.icon, size: 20, color: theme.colorScheme.primary),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    spec.label,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.labelLarge,
+                  ),
+                ),
+              ],
+            ),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.baseline,
+                textBaseline: TextBaseline.alphabetic,
+                children: [
+                  Text(
+                    value,
+                    style: theme.textTheme.headlineMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  Text(spec.unit, style: theme.textTheme.bodySmall),
+                ],
+              ),
+            ),
+            Text(
+              'Mode: ${reading.activity.name.toUpperCase()}',
+              style: theme.textTheme.bodySmall,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ---------- error display ----------
+
+class ErrorCard extends StatelessWidget {
+  const ErrorCard({super.key, required this.error});
+
+  final String error;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          children: [
+            const Icon(Icons.cloud_off, size: 36, color: Colors.red),
+            const SizedBox(height: 12),
+            const Text('Unable to load telemetry'),
+            const SizedBox(height: 6),
+            Text(error, textAlign: TextAlign.center),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ---------- helpers ----------
+
+String _formatTimestamp(DateTime timestamp) {
+  final local = timestamp.toLocal();
+
+  String two(int value) => value.toString().padLeft(2, '0');
+
+  return '${local.year}-${two(local.month)}-${two(local.day)} '
+      '${two(local.hour)}:${two(local.minute)}:${two(local.second)}';
+}
