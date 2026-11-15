@@ -1,135 +1,196 @@
 import sqlite3
-from typing import List
-import models
+import threading
+from contextlib import contextmanager
+from datetime import datetime
+from enum import Enum
+from typing import List, Optional
+
+import app.models as models
+
+# Whitelist of tables -> columns. Identifiers can't be bound, so only
+# names from this dict are ever formatted into SQL. Values always use :name.
+_COLUMNS = {
+    "user": ("origin_id", "astronaut_id", "name"),
+    "reading": ("origin_id", "astronaut_id", "timestamp", "hr", "spo2",
+                "temp", "bp_sys", "bp_dia", "resp", "activity"),
+    "alert": ("origin_id", "astronaut_id", "timestamp", "severity",
+              "metric", "message", "acknowledged"),
+}
+
+_SCHEMA = """
+CREATE TABLE IF NOT EXISTS reading(
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    origin_id INTEGER,              -- id of the first row in a revision chain
+    astronaut_id TEXT NOT NULL,
+    timestamp TEXT NOT NULL,
+    hr REAL, spo2 REAL, temp REAL, bp_sys REAL, bp_dia REAL, resp REAL,
+    activity TEXT NOT NULL DEFAULT 'rest');
+CREATE INDEX IF NOT EXISTS idx_reading_astro_ts ON reading(astronaut_id, timestamp);
+
+CREATE TABLE IF NOT EXISTS alert(
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    origin_id INTEGER,
+    astronaut_id TEXT NOT NULL,
+    timestamp TEXT NOT NULL,
+    severity TEXT NOT NULL,
+    metric TEXT NOT NULL,
+    message TEXT NOT NULL,
+    acknowledged INTEGER NOT NULL DEFAULT 0);
+
+CREATE TABLE IF NOT EXISTS user(
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    origin_id INTEGER,
+    astronaut_id TEXT NOT NULL,
+    name TEXT NOT NULL);
+"""
 
 
-class DBInstance:
-    conn: sqlite3.Connection
+def _adapt(value):
+    """Python -> SQLite for the types sqlite3 doesn't handle well."""
+    if isinstance(value, datetime):
+        return value.isoformat()
+    if isinstance(value, Enum):
+        return value.value
+    return value
 
+
+class DbController:
     def __init__(self, path: str):
-        self.conn = sqlite3.connect(path)
-        pass
+        self.conn = sqlite3.connect(path, check_same_thread=False)
+        self.conn.row_factory = sqlite3.Row
+        self._lock = threading.RLock()  # FastAPI runs def routes in a threadpool
+        with self._lock:
+            self.conn.executescript(_SCHEMA)
 
-    @property
-    def cursor(self) -> sqlite3.Cursor:
-        return self.conn.cursor()
+    # ---------- internals ----------
+
+    @contextmanager
+    def _tx(self):
+        """Locked cursor that commits on success and rolls back on error."""
+        with self._lock:
+            cur = self.conn.cursor()
+            try:
+                yield cur
+                self.conn.commit()
+            except Exception:
+                self.conn.rollback()
+                raise
+            finally:
+                cur.close()
+
+    @staticmethod
+    def _insert_row(cur: sqlite3.Cursor, table: str, data: dict) -> int:
+        cols = _COLUMNS[table]  # KeyError on an unknown table
+        cur.execute(
+            f"INSERT INTO {table} ({', '.join(cols)}) "
+            f"VALUES ({', '.join(':' + c for c in cols)})",
+            {c: _adapt(data.get(c)) for c in cols},
+        )
+        return cur.lastrowid
+
+    def _add(self, table: str, model) -> int:
+        with self._tx() as cur:
+            return self._insert_row(cur, table, model.model_dump())
+
+    def _insert_revised(self, table: str, row_id: int, fields: dict) -> int:
+        if not fields:
+            raise ValueError("No fields provided to update")
+        editable = set(_COLUMNS[table]) - {"origin_id"}
+        unknown = set(fields) - editable
+        if unknown:
+            raise ValueError(f"Invalid field(s) for {table}: {sorted(unknown)}")
+
+        with self._tx() as cur:  # select + insert are one atomic step
+            cur.execute(f"SELECT * FROM {table} WHERE id = :id", {"id": row_id})
+            row = cur.fetchone()
+            if row is None:
+                raise LookupError(f"No {table} row with id={row_id}")
+            data = {**dict(row), **fields}
+            data["origin_id"] = row["origin_id"] or row["id"]
+            return self._insert_row(cur, table, data)  # id of the NEW row
+
+    def _select(self, table: str, clauses=(), params=None,
+                limit: Optional[int] = None, order_by: str = "id"):
+        """Latest revision of each row, oldest first. clauses are constants."""
+        if table not in _COLUMNS:
+            raise ValueError(f"Unknown table: {table}")
+        params = dict(params or {})
+        sql = (f"SELECT * FROM {table} WHERE id IN "
+               f"(SELECT MAX(id) FROM {table} GROUP BY COALESCE(origin_id, id))")
+        for clause in clauses:
+            sql += f" AND {clause}"
+        sql += f" ORDER BY {order_by} DESC, id DESC"
+        if limit is not None:
+            sql += " LIMIT :limit"
+            params["limit"] = limit
+        with self._lock:
+            rows = self.conn.execute(sql, params).fetchall()
+        return rows[::-1]
+
+    @staticmethod
+    def _as(model, rows):
+        return [model(**dict(r)) for r in rows]
+
+    # ---------- getters ----------
 
     def get_users(self, astronaut_id: str) -> List[models.User]:
-        cursor = self.cursor
-        cursor.execute("SELECT * from users WHERE astronaut_id=?",
-                       (astronaut_id))
-        return [models.User(**dict(row)) for row in cursor.fetchall()]
+        rows = self._select("user", ["astronaut_id = :a"], {"a": astronaut_id})
+        return self._as(models.User, rows)
 
-    def get_readings(self, astronaut_id: str) -> List[models.Reading]:
-        cursor = self.cursor
-        cursor.execute("SELECT * from users WHERE astronaut_id=?",
-                       (astronaut_id))
-        return [models.Reading(**dict(row)) for row in cursor.fetchall()]
+    def get_readings(self, astronaut_id: str,
+                     limit: Optional[int] = None) -> List[models.Reading]:
+        rows = self._select("reading", ["astronaut_id = :a"],
+                            {"a": astronaut_id}, limit=limit,
+                            order_by="timestamp")
+        return self._as(models.Reading, rows)
 
-    def get_alerts(self, astronaut_id: str) -> List[models.Alert]:
-        cursor = self.cursor
-        cursor.execute("SELECT * from alert WHERE astronaut_id=?",
-                       (astronaut_id))
-        return [models.Alert(**dict(row)) for row in cursor.fetchall()]
+    def get_latest_reading(self, astronaut_id: str) -> Optional[models.Reading]:
+        readings = self.get_readings(astronaut_id, limit=1)
+        return readings[0] if readings else None
+
+    def get_latest_readings(self) -> List[models.Reading]:
+        """Newest reading for every astronaut (dashboard cards)."""
+        with self._lock:
+            ids = [r[0] for r in
+                   self.conn.execute("SELECT DISTINCT astronaut_id FROM reading")]
+        return [r for a in ids if (r := self.get_latest_reading(a))]
+
+    def get_alerts(self, id: Optional[int], astronaut_id: Optional[str] = None,
+                   severity: Optional[str] = None, active_only: bool = False,
+                   limit: Optional[int] = None) -> List[models.Alert]:
+        clauses, params = [], {}
+        if astronaut_id:
+            clauses.append("astronaut_id = :a")
+            params["a"] = astronaut_id
+        if severity:
+            clauses.append("severity = :s")
+            params["s"] = severity
+        if active_only:
+            clauses.append("acknowledged = 0")
+        rows = self._select("alert", clauses, params, limit=limit)
+        return self._as(models.Alert, rows)
+
+    # ---------- setters ----------
 
     def add_user(self, user: models.User) -> int:
-        cursor = self.cursor
-        cursor.execute(
-            "INSERT INTO user (astronaut_id, name) VALUES (?, ?)",
-            (user.astronaut_id, user.name),
-        )
-        self.conn.commit()
-        return cursor.lastrowid
+        return self._add("user", user)
 
     def add_reading(self, reading: models.Reading) -> int:
-        cursor = self.cursor
-        cursor.execute(
-            """INSERT INTO reading
-               (astronaut_id, timestamp, hr, spo2, temp, bp_sys, bp_dia, resp,
-            activity)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (
-                reading.astronaut_id,
-                reading.timestamp,
-                reading.hr,
-                reading.spo2,
-                reading.temp,
-                reading.bp_sys,
-                reading.bp_dia,
-                reading.resp,
-                reading.activity,
-            ),
-        )
-        self.conn.commit()
-        return cursor.lastrowid
+        return self._add("reading", reading)
 
     def add_alert(self, alert: models.Alert) -> int:
-        cursor = self.cursor
-        cursor.execute(
-            """INSERT INTO alert
-               (astronaut_id, timestamp, hr, spo2, temp, bp_sys, bp_dia, resp,
-            activity) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (
-                alert.astronaut_id,
-                alert.timestamp,
-                alert.hr,
-                alert.spo2,
-                alert.temp,
-                alert.bp_sys,
-                alert.bp_dia,
-                alert.resp,
-                alert.activity,
-            ),
-        )
-        self.conn.commit()
-        return cursor.lastrowid
+        return self._add("alert", alert)
 
-    pass
+    # ---------- "updates" (insert a revised copy) ----------
+
+    def update_user(self, user_id: int, **fields) -> int:
+        return self._insert_revised("user", user_id, fields)
+
+    def update_reading(self, reading_id: int, **fields) -> int:
+        return self._insert_revised("reading", reading_id, fields)
+
+    def update_alert(self, alert_id: int, **fields) -> int:
+        return self._insert_revised("alert", alert_id, fields)
 
 
-dbInstance = DBInstance("./db.sqlite")
-
-
-def initializeDatabase():
-    # Create Reading Table
-    script = """
-    CREATE TABLE IF NOT EXISTS reading(
-        id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
-        astronaut_id TEXT NOT NULL,
-        timestamp TEXT,
-        hr REAL,
-        spo2 REAL,
-        temp REAL,
-        bp_sys REAL,
-        bp_dia REAL,
-        resp REAL,
-        activity TEXT);
-
-    CREATE TABLE IF NOT EXISTS alert(
-        id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
-        astronaut_id TEXT NOT NULL,
-        timestamp TEXT,
-        hr REAL,
-        spo2 REAL,
-        temp REAL,
-        bp_sys REAL,
-        bp_dia REAL,
-        resp REAL,
-        activity TEXT);
-
-    CREATE TABLE IF NOT EXISTS user(
-        id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
-        astronaut_id TEXT NOT NULL,
-        name TEXT NOT NULL UNIQUE,
-        FOREIGN KEY (astronaut_id) REFERENCES alert(astronaut_id),
-        FOREIGN KEY (astronaut_id) REFERENCES reading(astronaut_id));
-
-    """
-    # Create Alert Table
-    dbInstance.cursor.executescript(script)
-    pass
-
-
-if __name__ == "__main__":
-    initializeDatabase()
-    pass
+DbInstance = DbController("./db.sqlite")

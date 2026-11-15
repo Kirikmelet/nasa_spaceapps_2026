@@ -1,6 +1,6 @@
 """Astronaut vitals simulator.
 
-Posts one reading per astronaut every --interval seconds to POST /vitals.
+Posts one reading per astronaut every --interval seconds to POST /api/dummy/vitals.
 Talks to the server only through the HTTP API.
 
 Usage (server must be running: python -m uvicorn app.main:app --reload):
@@ -170,7 +170,7 @@ def main():
     ap.add_argument("--spo2-fault-at", type=float, help="seconds after start: inject SpO2 drop on astro_2")
     args = ap.parse_args()
 
-    endpoint = args.url.rstrip("/") + "/vitals"
+    endpoint = args.url.rstrip("/") + "/api/dummy/vitals"
     start = time.time()
     scheduled = []
     if args.hr_fault_at is not None:

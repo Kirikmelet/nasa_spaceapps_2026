@@ -7,12 +7,14 @@ ActivityType = Literal["rest", "sleep", "exercise", "eva"]
 MetricType = Literal["hr", "spo2", "temp", "bp_sys", "bp_dia", "resp"]
 SeverityType = Literal["info", "warning", "critical"]
 
+
 class ThresholdRange(BaseModel):
     unit: str
     normal_min: float
     normal_max: float
     warning_low: float
     warning_high: float
+
 
 NASA_DATA: dict[MetricType, dict[ActivityType, ThresholdRange]] = {
     "hr": {
@@ -100,6 +102,7 @@ NASA_DATA: dict[MetricType, dict[ActivityType, ThresholdRange]] = {
             warning_low=12.0, warning_high=40.0),
     },
 }
+
 
 class User(BaseModel):
     id: Optional[int]
