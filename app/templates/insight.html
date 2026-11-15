@@ -1,8 +1,29 @@
 {% if error %}
-  <p class="text-sm text-rose-300">Couldn't reach the insight service. Try again in a moment.</p>
+  <p class="insight-error">Couldn't reach the insight service. Try again in a moment.</p>
 {% else %}
-  <p class="text-sm text-zinc-200 whitespace-pre-wrap">{{ text }}</p>
-  <p class="text-xs text-zinc-500 mt-3">
-    Generated {{ generated_at.strftime('%H:%M:%S') }} · AI-generated, not medical advice
-  </p>
+  <div class="insight insight--{{ result.urgency }}">
+    <div class="insight-head">
+      <span class="urgency-pill urgency-pill--{{ result.urgency }}">{{ result.urgency }}</span>
+      <span class="insight-window">{{ result.data_window }}</span>
+    </div>
+
+    <p class="insight-summary">{{ result.summary }}</p>
+
+    {% for title, items, tone in [
+         ('Observations', result.observations, ''),
+         ('Guidance', result.guidance, ''),
+         ('Warnings', result.warnings, 'insight-list--warn')] %}
+      {% if items %}
+        <h4 class="insight-subtitle">{{ title }}</h4>
+        <ul class="insight-list {{ tone }}">
+          {% for item in items %}<li>{{ item }}</li>{% endfor %}
+        </ul>
+      {% endif %}
+    {% endfor %}
+
+    <p class="insight-meta">
+      Generated {{ generated_at.strftime('%H:%M:%S') }}{% if cached %} (cached){% endif %}
+      · AI-generated, not medical advice
+    </p>
+  </div>
 {% endif %}
