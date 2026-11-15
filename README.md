@@ -11,6 +11,17 @@ A real-time crew health monitor for a flight surgeon. Simulated astronaut vitals
 <!-- TODO Sunday: demo video link -->
 <!-- TODO Sunday: dashboard screenshot -->
 
+![dashboard1](./imgs/dashboard1.png)
+![dashboard2](./imgs/dashboard2.png)
+![dashboard3](./imgs/dashboard3.png)
+![mobile1](./imgs/mobile1.png)
+![mobile2](./imgs/mobile2.png)
+![mobile3](./imgs/mobile3.png)
+![mobile4](./imgs/mobile4.png)
+
+
+
+
 ---
 
 ## Why personalized baselines?
