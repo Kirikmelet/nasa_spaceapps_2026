@@ -2,6 +2,11 @@
 #
 from google import genai
 
+from dotenv import load_dotenv
+
+load_dotenv()
+
+
 
 class GeminiClient():
     client: genai.Client
@@ -9,7 +14,6 @@ class GeminiClient():
 
     def __init__(self, model: str = "gemini-3.8-flash"):
         self.client = genai.Client()
-        self.client.interactions.create()
         self.model = model
         pass
 
@@ -21,13 +25,16 @@ class GeminiClient():
         interaction = self.interactions.create(
             model=self.model,
             generation_config={
-                "thinking_level": "medium"
+                "thinking_level": "low"
             },
             input=query
         )
         return interaction.output_text
 
     pass
+
+
+
 
 
 geminiClient = GeminiClient()

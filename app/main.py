@@ -1,14 +1,19 @@
+from app.models import Alert, Reading
+from app.ai import geminiClient
+from app.alert_engine import RANK, AlertEngine
+from fastapi.templating import Jinja2Templates
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import RedirectResponse, FileResponse
+from fastapi import FastAPI, HTTPException, Request
 import threading
 from datetime import datetime
 from typing import Optional
+import time
+import json
 
-from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import RedirectResponse
-from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
 
-from app.alert_engine import RANK, AlertEngine
-from app.models import Alert, Reading
+_insight_cache = {"ts": 0.0, "text": None, "at": None}
+INSIGHT_COOLDOWN = 30  # seconds
 
 app = FastAPI(title="Astronaut Health Monitor")
 templates = Jinja2Templates(directory="app/templates")
@@ -20,6 +25,35 @@ alerts: list[Alert] = []
 _next_alert_id = 1
 engine = AlertEngine()
 lock = threading.Lock()  # FastAPI runs plain def routes in a thread pool
+
+
+def build_insight_prompt() -> str:
+    # copy data under the lock, then release it BEFORE the slow API call
+    with lock:
+        crew = [r.model_dump(mode="json") for r in sorted(
+            latest.values(), key=lambda r: r.astronaut_id)]
+        snapshot = alerts[-500:]
+    recent = collapse_log(snapshot, limit=15)
+
+    alert_lines = [
+        {
+            "astronaut": g["astronaut_id"],
+            "metric": g["metric"],
+            "severity": g["severity"],
+            "count": g["count"],
+            "last_seen": g["last_ts"].strftime("%H:%M:%S"),
+            "acknowledged": g["acknowledged"],
+        }
+        for g in recent
+    ]
+
+    return (
+        "You are a flight-surgeon assistant reviewing simulated astronaut telemetry.\n"
+        "Summarize crew status in under 120 words: who needs attention first, "
+        "any worrying trends, and one suggested next step. Plain text, no markdown.\n\n"
+        f"Latest vitals per astronaut:\n{json.dumps(crew)}\n\n"
+        f"Recent alerts (newest first, repeats collapsed):\n{json.dumps(alert_lines)}"
+    )
 
 
 def add_alert(astronaut_id: str, severity: str, metric: str, message: str, ts: datetime) -> Alert:
@@ -81,7 +115,8 @@ def acknowledge(alert_id: int):
 def alerts_partial(request: Request):
     with lock:
         active = [a for a in alerts if not a.acknowledged]
-    active.sort(key=lambda a: (-RANK[a.severity], -a.id))  # critical first, newest first
+    # critical first, newest first
+    active.sort(key=lambda a: (-RANK[a.severity], -a.id))
     return templates.TemplateResponse(request, "alerts.html", {"alerts": active})
 
 
@@ -90,6 +125,7 @@ def vitals_partial(request: Request):
     with lock:
         cards = sorted(latest.values(), key=lambda r: r.astronaut_id)
     return templates.TemplateResponse(request, "vitals.html", {"cards": cards})
+
 
 @app.get("/partials/alert-log")
 def alert_log_partial(request: Request, severity: Optional[str] = None):
@@ -101,7 +137,34 @@ def alert_log_partial(request: Request, severity: Optional[str] = None):
     return templates.TemplateResponse(request, "alert-log.html", {"groups": groups})
 
 
+@app.post("/partials/insight")
+def insight_partial(request: Request):
+    now = time.time()
+    error = None
+
+    if _insight_cache["text"] and now - _insight_cache["ts"] < INSIGHT_COOLDOWN:
+        text, cached = _insight_cache["text"], True
+    else:
+        try:
+            text = geminiClient.query(build_insight_prompt())
+            if not text:
+                raise ValueError("Model returned empty!")
+            _insight_cache.update(ts=now, text=text)
+            cached = False
+        except Exception as e:
+            text, error = None, str(e)
+
+    return templates.TemplateResponse(
+        request, "insight.html",
+        {"text": text, "error": error, "generated_at": _insight_cache["at"]},
+    )
+
+
 # ---------- Page and redirect ----------
+
+@app.get("/favicon.ico")
+def get_favicon():
+    return FileResponse("app/static/favicon.ico")
 
 @app.get("/", include_in_schema=False)
 def root():
@@ -138,5 +201,6 @@ def collapse_log(snapshot: list[Alert], limit: int = 100) -> list[dict]:
 
     groups.reverse()  # newest first
     return groups[:limit]
+
 
 app.mount("/dashboard", StaticFiles(directory="app/static", html=True), name="dashboard")

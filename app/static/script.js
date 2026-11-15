@@ -222,3 +222,9 @@
         console.error("Failed to load metric history:", err);
       }
     }
+document.body.addEventListener('htmx:responseError', (e) => {
+  document.querySelector('#insight-output').textContent = `Error ${e.detail.xhr.status}`;
+});
+document.body.addEventListener('htmx:sendError', () => {
+  document.querySelector('#insight-output').textContent = 'Could not reach the server';
+});

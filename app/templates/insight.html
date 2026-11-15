@@ -1,0 +1,8 @@
+{% if error %}
+  <p class="text-sm text-rose-300">Couldn't reach the insight service. Try again in a moment.</p>
+{% else %}
+  <p class="text-sm text-zinc-200 whitespace-pre-wrap">{{ text }}</p>
+  <p class="text-xs text-zinc-500 mt-3">
+    Generated {{ generated_at.strftime('%H:%M:%S') }} · AI-generated, not medical advice
+  </p>
+{% endif %}
