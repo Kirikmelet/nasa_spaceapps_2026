@@ -9,7 +9,6 @@ A real-time crew health monitor for a flight surgeon. Simulated astronaut vitals
 **All vitals data is simulated.** See [Data disclosure](#data-disclosure).
 
 <!-- TODO Sunday: demo video link -->
-<!-- TODO Sunday: dashboard screenshot -->
 
 ![dashboard1](./imgs/dashboard1.png)
 ![dashboard2](./imgs/dashboard2.png)
