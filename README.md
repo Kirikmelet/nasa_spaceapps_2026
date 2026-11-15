@@ -39,8 +39,8 @@ Our engine does two things. It applies safety limits that depend on what the ast
 ## Architecture
 
 ```
-simulator/simulate.py  --POST /vitals-->  FastAPI server            <--GET /partials/*--  Browser
-(simulated vitals,                        - stores readings                              (HTMX dashboard,
+simulator/simulate.py  --POST /vitals-->  FastAPI server            <--GET /partials/*--  Browser            <--GET /api/*/* Browser/Flutter
+(simulated vitals,                        - stores readings                              (HTMX dashboard,           (Sqlite CRUD)
  fault + activity commands)               - runs the alert engine                         polls every 3 s)
                                           - serves API + dashboard
 ```
@@ -48,8 +48,9 @@ simulator/simulate.py  --POST /vitals-->  FastAPI server            <--GET /part
 - **Simulator** (`simulator/simulate.py`): a separate client that generates vitals for 3 astronauts and posts them over HTTP every 2 s. The server doesn't know the simulator exists, so a real sensor feed could replace it.
 - **Server** (`app/main.py`): FastAPI. One process serves the JSON API, the HTML partials and the static dashboard.
 - **Alert engine** (`app/alert_engine.py`): pure Python with no web code, so it is unit-tested in isolation.
-- **Dashboard** (`app/static/index.html`, `app/templates/`): HTMX polls server-rendered partials every 3 s (with idiomorph to avoid flicker). Tailwind for styling, Chart.js for the trend chart.
-- **Storage**: in-memory lists guarded by a `threading.Lock`. Data resets when the server restarts.
+- **Dashboard** (`app/static/index.html`, `app/templates/`): HTMX polls server-rendered partials every 3 s (with idiomorph to avoid flicker). Chart.js for the trend chart.
+- **Storage**: SQLite3 CRUD operations guarded by a `threading.Lock`. Data is saved across sessions.
+- **Android App**: (`flutter/app`) Alternative Android app available with effectively the same featues as the web application.
 
 ## How the alert engine works
 
@@ -92,7 +93,7 @@ Requires Python 3.10+.
 python -m venv .venv
 .venv\Scripts\activate            # Windows (macOS/Linux: source .venv/bin/activate)
 pip install -r requirements.txt
-python -m uvicorn app.main:app --reload
+python -m uvicorn app.main:app --reload --port 0.0.0.0 --host 8000
 ```
 
 In a second terminal, with the venv active:
@@ -102,6 +103,8 @@ python simulator/simulate.py
 ```
 
 Open **http://localhost:8000/** for the dashboard, or **http://localhost:8000/docs** for the interactive API docs.
+
+If you are using the Android application, set the API link to `http://<local ip>:8000` in the application settings page.
 
 ### Simulator commands
 
@@ -118,6 +121,7 @@ Type these in the simulator terminal. The astronaut id (`astro_1`, `astro_2`, `a
 | `resp [id]` | ~24 breaths/min | Warning |
 | `rest` / `sleep` / `exercise [id]` | Switch activity | Shifts that astronaut's normal vitals and tags readings with the activity |
 | `clear [id]` | Remove the fault (no id clears everyone) | Open condition clears |
+| `rename [name]` | Rename user | Renames user, allows variadic string parameters |
 | `quit` | Exit | |
 
 Scripted run: `python simulator/simulate.py --hr-fault-at 60 --spo2-fault-at 120` (HR fault on astro_1, SpO2 fault on astro_2).
@@ -133,15 +137,45 @@ Baselines are per activity, so after an activity switch, baseline alerts pause f
 
 ## API
 
+Interactive docs are at **http://localhost:8000/docs**. The server has two kinds of routes:
+
+- **JSON API** (`/api/...`): used by the simulator and the Android app.
+- **HTML partials** (`/partials/...`): server-rendered fragments used only by the HTMX web dashboard.
+
+### JSON API
+
 | Method | Path | Description |
 |---|---|---|
-| POST | `/vitals` | Submit a reading. It is stored and run through the alert engine. Returns `{"status": "ok", "stored": <total readings>}`. |
-| GET | `/astronauts/{id}/vitals?limit=300` | Most recent readings for one astronaut |
-| GET | `/alerts?severity=` | All alerts, with an optional severity filter |
-| POST | `/alerts/{id}/acknowledge` | Acknowledge an alert (404 if the id is unknown) |
-| GET | `/partials/alerts` | HTML: unacknowledged alerts, critical first |
-| GET | `/partials/vitals` | HTML: latest reading per astronaut |
+| POST | `/api/astronauts/{id}/vitals` | Submit a reading. It is stored and run through the alert engine. Returns `201` with `{"id": <reading id>, "alert_ids": [<new alert ids>]}`. The id in the path must match `astronaut_id` in the body. |
+| POST | `/api/dummy/vitals` | Older simulator endpoint with the same effect, but it takes no astronaut id in the path |
+| GET | `/api/astronauts/{id}/vitals` | Readings for one astronaut |
+| POST | `/api/astronauts/{id}/user` | Create or update the astronaut's profile (name, etc.). Returns the new row id. |
+| GET | `/api/astronauts/{id}/user` | Get the astronaut's profile |
+| GET | `/api/alerts?severity=` | All alerts, with an optional severity filter. Acknowledged alerts are included; check the `acknowledged` field. |
+| GET | `/api/alerts/{alert_id}?severity=` | Look up alerts by id |
+| POST | `/api/alerts/{alert_id}/acknowledge` | Acknowledge one alert |
+| POST | `/api/astronauts/{id}/alerts/{metric}/acknowledge` | Acknowledge every open alert for one astronaut and metric. Returns the refreshed alerts **HTML**, so it is meant for the web dashboard. |
+
+### HTML partials (web dashboard)
+
+| Method | Path | Description |
+|---|---|---|
+| GET | `/partials/vitals` | Latest reading per astronaut, as cards |
+| GET | `/partials/alerts` | Unacknowledged alerts, critical first, one per astronaut and metric |
+| GET | `/partials/alert-log?severity=&hide_stale=` | Alert history, with repeated alerts collapsed into one row with a count |
+| GET | `/partials/metric-history?astronaut_id=&metric=&limit=50&live=` | Trend chart and color-coded history for one metric (`404` for an unknown metric). `live=true` returns the auto-refreshing version. |
+| GET | `/partials/astronaut-options` | `<option>` list for the astronaut picker |
+| POST | `/partials/insight` | AI summary of an astronaut's last 60 readings (form field `astronaut_id`). Results are cached for 30 s per astronaut to protect the API quota. |
+
+### Other routes
+
+| Method | Path | Description |
+|---|---|---|
 | GET | `/` | Redirects to `/dashboard/` |
+| GET | `/dashboard/` | The static web dashboard |
+| GET | `/favicon.ico` | Favicon |
+
+The AI router (`app/ai_deepseek.py`) adds more routes. <!-- TODO: list them -->
 
 Example reading:
 
@@ -178,43 +212,63 @@ python -m pytest
 
 - Only heart rate is activity-aware in the engine. The other metrics use one fixed table.
 - There are two sets of ranges: the engine's limits, and the "Normal" ranges shown on the vitals cards (from `NASA_DATA` in `app/models.py`). They don't fully match. Next step: one shared, sourced reference table.
-- Storage is in memory and resets on restart. A SQLite layer (`app/db.py`) is started but not connected yet.
 - Use real data sources (wearables or analog-mission datasets) instead of simulation.
 - Astronaut self-reported symptoms as additional alert context.
 
 ## Project layout
 
 ```
-app/
-  main.py           routes, in-memory stores
-  alert_engine.py   hard limits, baseline detector, de-duplication, escalation
-  models.py         Reading / Alert models, reference-range table
-  db.py             SQLite storage (work in progress, not used yet)
-  ai.py             Gemini client (experimental, not used yet)
-  static/           dashboard page and CSS
-  templates/        HTMX partials (alerts.html, vitals.html)
+app/                        FastAPI server
+  main.py                   JSON API routes, HTML partials, ingest + alert storage
+  alert_engine.py           hard limits, baseline detector, de-duplication, escalation
+  status.py                 classify(): turns a reading into healthy / warning / critical
+  models.py                 Reading / Alert / User models, reference-range table
+  db.py                     SQLite storage (DbInstance), insert-only history
+  ai_deepseek.py            AI insight client (used by the server)
+  ai.py, ai_grok.py         alternative AI clients (not used by main.py)
+  chart.py                  Chart Geometry
+  static/                   web dashboard page, scripts and CSS
+  templates/                HTMX partials (alerts, alert-log, vitals, insight, metric-*)
+flutter/app/                Android app (Flutter)
+  lib/
+    main.dart               app entry point
+    home.dart               Home Widget
+    api.dart                API Wrapper
+    astro_api.dart          API Bindings
+    mental_wellness.dart    Wellness Insight Widget
+    settings.dart           Settings Widget
+    local_avatar.dart       Local Avatar Handler
+  android/                  Android project files
+  pubspec.yaml              Flutter dependencies
 simulator/
-  simulate.py       vitals generator with fault and activity commands
+  simulate.py               vitals generator with fault and activity commands
 tests/
-  test_alert_engine.py
+  test_alert_engine.py      alert engine unit tests
+NASA_STD_3001_Vol1_RevB_Health_Standards_Data.xlsx   reference ranges source data
+requirements.txt            Python dependencies
+LICENSE.txt
 ```
 
 ## Team
 
-Troy Dwijanto, Ayaan Khan, Jing Chen
-- Backend, alert engine, simulator, tests, README: Ayaan Khan
-- TODO - Add contributions
+- Troy Dwijanto: Backend, Dashboard, Storage, Android
+- Ayaan Khan: Backend, Dashboard, Storage, Reference Research
+- Jing Chen: Reference Research, Dashboard
+
 
 ## Credits
 
 Built with these open-source projects. Each is used under its own license.
 
 - [FastAPI](https://fastapi.tiangolo.com/), [Uvicorn](https://www.uvicorn.org/) and [Pydantic](https://docs.pydantic.dev/): API server and data models
-- [Jinja2](https://jinja.palletsprojects.com/): server-rendered templates
-- [HTMX](https://htmx.org/) and [idiomorph](https://github.com/bigskysoftware/idiomorph): live dashboard updates
-- [Tailwind CSS](https://tailwindcss.com/): styling
-- [Chart.js](https://www.chartjs.org/): trend charts
+- [Jinja2](https://jinja.palletsprojects.com/): Server-Rendered Templates
+- [Deepseek](https://platform.deepseek.com/): Super-Interlligence Service
+- [HTMX](https://htmx.org/) and [idiomorph](https://github.com/bigskysoftware/idiomorph): Live Dashboard Updates
+- [Flutter](https://flutter.dev/): Android Development Framework
+- [Chart.js](https://www.chartjs.org/): Trend Charts
 
 ## License
 
-Released under the [MIT License](LICENSE).
+Released under the [MIT License](LICENSE.txt).
+
+Built with Python, FastAPI, Pydantic, HTMX, Jinja2, and Chart.js, Flutter.
