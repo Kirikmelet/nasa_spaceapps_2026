@@ -216,7 +216,7 @@ python -m pytest
 ## Data disclosure
 
 - **All vitals are simulated** by `simulator/simulate.py`. No real astronaut or patient data is used.
-- **Thresholds and reference ranges are illustrative.** They are plausible values chosen for demonstration and have not been verified against NASA standards or clinical guidance.
+- Reference ranges are gathered from NASA Spaceflight Human-System Standard Volume 1, Crew Health.
 <!-- TODO: if the "Normal" ranges in NASA_DATA came from the NASA-STD-3001 spreadsheet in the repo, say so here and cite NASA-STD-3001 -->
 
 ## Limitations and next steps
@@ -263,8 +263,8 @@ LICENSE.txt
 ## Team
 
 - Troy Dwijanto: Backend, Dashboard, Storage, Android
-- Ayaan Khan: Backend, Dashboard, Storage, Reference Research
-- Jing Chen: Reference Research, Dashboard
+- Ayaan Khan: Backend, Dashboard, Storage, Reference Research, Actor
+- Jing Chen: Reference Research, Dashboard, Video Editing
 
 
 ## Credits
