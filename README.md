@@ -172,6 +172,7 @@ python -m pytest
 
 - **All vitals are simulated** by `simulator/simulate.py`. No real astronaut or patient data is used.
 - **Thresholds and reference ranges are illustrative.** They are plausible values chosen for demonstration and have not been verified against NASA standards or clinical guidance.
+<!-- TODO: if the "Normal" ranges in NASA_DATA came from the NASA-STD-3001 spreadsheet in the repo, say so here and cite NASA-STD-3001 -->
 
 ## Limitations and next steps
 
@@ -200,10 +201,20 @@ tests/
 
 ## Team
 
-<!-- TODO: names and roles -->
-- Backend, alert engine, simulator, tests, README: _name_
-- Dashboard (HTMX + Jinja2 + Chart.js): _name_, _name_
-- Reference ranges: _name_
-- Storage: _name_
+Troy Dwijanto, Ayaan Khan, Jing Chen
+- Backend, alert engine, simulator, tests, README: Ayaan Khan
+- TODO - Add contributions
 
-Built with Python, FastAPI, Pydantic, HTMX, Jinja2, Tailwind and Chart.js.
+## Credits
+
+Built with these open-source projects. Each is used under its own license.
+
+- [FastAPI](https://fastapi.tiangolo.com/), [Uvicorn](https://www.uvicorn.org/) and [Pydantic](https://docs.pydantic.dev/): API server and data models
+- [Jinja2](https://jinja.palletsprojects.com/): server-rendered templates
+- [HTMX](https://htmx.org/) and [idiomorph](https://github.com/bigskysoftware/idiomorph): live dashboard updates
+- [Tailwind CSS](https://tailwindcss.com/): styling
+- [Chart.js](https://www.chartjs.org/): trend charts
+
+## License
+
+Released under the [MIT License](LICENSE).
