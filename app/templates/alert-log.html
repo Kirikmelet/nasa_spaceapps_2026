@@ -1,0 +1,25 @@
+{% if groups %}
+<ul class="space-y-1">
+  {% for g in groups %}
+  <li id="log-{{ g.id }}"
+      class="p-3 rounded-xl bg-white/5 border-l-4
+        {% if g.severity == 'critical' %} border-rose-500
+        {% elif g.severity == 'warning' %} border-amber-400
+        {% else %} border-sky-400 {% endif %}
+        {% if g.acknowledged %} opacity-50 {% endif %}">
+    <div class="flex justify-between items-center text-xs text-zinc-400">
+      <span class="font-mono">{{ g.last_ts.strftime('%H:%M:%S') }}</span>
+      <span class="uppercase font-semibold">{{ g.severity }}</span>
+    </div>
+    <div class="text-sm text-white mt-1">
+      {{ g.astronaut_id }} · <span class="uppercase text-zinc-300">{{ g.metric }}</span>
+      {% if g.count > 1 %}<span class="text-xs text-zinc-400">×{{ g.count }}</span>{% endif %}
+    </div>
+    <div class="text-xs text-zinc-400 mt-0.5">{{ g.message }}</div>
+    {% if g.acknowledged %}<div class="text-xs text-emerald-400 mt-1">✓ acknowledged</div>{% endif %}
+  </li>
+  {% endfor %}
+</ul>
+{% else %}
+<p class="p-4 text-sm text-zinc-500">No alerts logged yet.</p>
+{% endif %}
