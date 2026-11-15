@@ -14,7 +14,7 @@ _COLUMNS = {
     "reading": ("origin_id", "astronaut_id", "timestamp", "hr", "spo2",
                 "temp", "bp_sys", "bp_dia", "resp", "activity"),
     "alert": ("origin_id", "astronaut_id", "timestamp", "severity",
-              "metric", "message", "acknowledged"),
+              "metric", "message", "acknowledged", "activity", "value"),
 }
 
 _SCHEMA = """
@@ -35,6 +35,8 @@ CREATE TABLE IF NOT EXISTS alert(
     severity TEXT NOT NULL,
     metric TEXT NOT NULL,
     message TEXT NOT NULL,
+    value REAL,
+    activity TEXT NOT NULL DEFAULT 'rest',
     acknowledged INTEGER NOT NULL DEFAULT 0);
 
 CREATE TABLE IF NOT EXISTS user(
@@ -98,10 +100,12 @@ class DbController:
         editable = set(_COLUMNS[table]) - {"origin_id"}
         unknown = set(fields) - editable
         if unknown:
-            raise ValueError(f"Invalid field(s) for {table}: {sorted(unknown)}")
+            raise ValueError(
+                f"Invalid field(s) for {table}: {sorted(unknown)}")
 
         with self._tx() as cur:  # select + insert are one atomic step
-            cur.execute(f"SELECT * FROM {table} WHERE id = :id", {"id": row_id})
+            cur.execute(
+                f"SELECT * FROM {table} WHERE id = :id", {"id": row_id})
             row = cur.fetchone()
             if row is None:
                 raise LookupError(f"No {table} row with id={row_id}")
@@ -133,9 +137,14 @@ class DbController:
 
     # ---------- getters ----------
 
-    def get_users(self, astronaut_id: str) -> List[models.User]:
-        rows = self._select("user", ["astronaut_id = :a"], {"a": astronaut_id})
-        return self._as(models.User, rows)
+    def get_user(self, astronaut_id: str) -> Optional[models.User]:
+        rows = self._select("user", ["astronaut_id = :a"], {
+            "a": astronaut_id}, limit=1)
+        return self._as(models.User, rows)[0] if rows else None
+    
+    def get_name_map(self) -> dict[str, str]:
+        rows = self._select("user")   # newest revision per user, no filters
+        return {r["astronaut_id"]: r["name"] for r in rows}
 
     def get_readings(self, astronaut_id: str,
                      limit: Optional[int] = None) -> List[models.Reading]:

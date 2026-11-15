@@ -1,0 +1,79 @@
+.alerts { display: flex; flex-direction: column; gap: 0.75rem; }
+
+.alerts-title {
+  display: flex; align-items: center; gap: 0.5rem;
+  margin: 0; padding: 0 0.5rem;
+  font-size: 1.125rem; line-height: 1.75rem; font-weight: 600;
+  color: var(--text-soft);
+}
+
+/* Collapse state lives in a checkbox OUTSIDE the polled section,
+   so the 3s refresh never resets it. */
+.alerts-toggle { position: absolute; opacity: 0; pointer-events: none; }
+
+.alerts-list { display: none; flex-direction: column; gap: 0.75rem; padding-top: 0.25rem; }
+.alerts-toggle:checked ~ #alerts-section .alerts-list { display: flex; }
+
+.when-open { display: none; }
+.alerts-toggle:checked ~ #alerts-section .when-open   { display: inline; }
+.alerts-toggle:checked ~ #alerts-section .when-closed { display: none; }
+
+.alerts-icon { display: inline-block; transition: transform 0.2s ease; }
+.alerts-toggle:checked ~ #alerts-section .alerts-icon { transform: rotate(180deg); }
+
+/* Keyboard focus on the hidden checkbox shows on the label */
+.alerts-toggle:focus-visible ~ #alerts-section .alerts-summary { outline: 2px solid var(--accent); }
+
+/* Summary bar */
+.alerts-summary {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 1rem; cursor: pointer; user-select: none;
+}
+.alerts-summary:hover { background: rgba(255, 255, 255, 0.05); }
+.alerts-summary-left  { display: flex; align-items: center; gap: 0.75rem; }
+.alerts-summary-text  { font-size: 0.875rem; font-weight: 500; color: var(--text-soft); }
+.alerts-summary-text strong { text-transform: uppercase; color: var(--text); }
+.alerts-summary-right { display: flex; align-items: center; gap: 0.5rem;
+                        font-size: 0.75rem; color: var(--text-dim); }
+
+/* Severity: card borders (.alert-critical glow is already in style.css) */
+.alert-warning { border-color: rgba(245, 158, 11, 0.5); }
+.alert-info    { border-color: rgba(14, 165, 233, 0.4); }
+
+/* Severity: pills */
+.sev-pill {
+  padding: 0.25rem 0.625rem; border-radius: 9999px;
+  font-size: 0.75rem; font-weight: 700;
+  letter-spacing: 0.05em; text-transform: uppercase;
+}
+.sev-pill--critical { background: var(--crit); color: #fff; background: #f43f5e; }
+.sev-pill--warning  { background: #fbbf24; color: #000; }
+.sev-pill--info     { background: #38bdf8; color: #000; }
+
+/* Alert cards */
+.alert-card {
+  display: flex; flex-direction: column; justify-content: space-between;
+  gap: 1rem; padding: 1rem;
+}
+.alert-main   { display: flex; align-items: flex-start; gap: 0.75rem; }
+.alert-who    { font-size: 0.875rem; font-weight: 600; color: var(--text); }
+.alert-metric { text-transform: uppercase; color: var(--text-muted); }
+.alert-msg    { margin-top: 0.125rem; font-size: 0.875rem; color: var(--text-muted); }
+.alert-time   { margin-top: 0.25rem; font-size: 0.75rem; color: var(--text-faint); }
+
+.btn-ack {
+  flex-shrink: 0; padding: 0.5rem 1rem;
+  font-size: 0.75rem; font-weight: 500; color: var(--text);
+  background: var(--fill-hover); border: 0; border-radius: 9999px;
+  cursor: pointer; transition: background 0.15s ease;
+}
+.btn-ack:hover { background: rgba(255, 255, 255, 0.2); }
+
+.alerts-empty {
+  display: flex; align-items: center; gap: 0.75rem;
+  padding: 1.25rem; font-size: 0.875rem; color: var(--ok);
+}
+
+@media (min-width: 640px) {
+  .alert-card { flex-direction: row; align-items: center; }
+}

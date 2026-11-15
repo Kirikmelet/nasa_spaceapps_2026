@@ -1,0 +1,20 @@
+<div id="history-live"
+     hx-get="/partials/metric-history?astronaut_id={{ astronaut_id|urlencode }}&metric={{ metric }}&live=true"
+     hx-trigger="every 1s" hx-swap="outerHTML">
+
+  <script type="application/json" id="chart-data">{{ chart|tojson }}</script>
+
+  <table class="history-table">
+    {% for r in rows %}
+    <tr>
+      <td class="cell-time">{{ r.time }}</td>
+      <td class="cell-activity">{{ r.activity }}</td>
+      <td class="cell-value">{{ ("%." ~ decimals ~ "f")|format(r.value) }}
+          <span class="cell-unit">{{ unit }}</span></td>
+      <td><span class="badge badge--{{ r.status }}">{{ r.status|title }}</span></td>
+    </tr>
+    {% else %}
+    <tr><td colspan="4" class="cell-empty">No records yet.</td></tr>
+    {% endfor %}
+  </table>
+</div>

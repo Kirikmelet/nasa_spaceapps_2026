@@ -1,10 +1,11 @@
-from app.models import Alert, Reading
+from app.models import Alert, Reading, User
 from app.db import DbInstance
-from app.alert_engine import RANK, AlertEngine, AlertEvent
+from app.status import classify
+from app.alert_engine import RANK, AlertEngine, AlertEvent, METRIC_INFO
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import RedirectResponse, FileResponse
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, HTTPException
 import threading
 from typing import Optional, List
 from pydantic import BaseModel
@@ -22,6 +23,32 @@ lock = threading.Lock()  # FastAPI runs plain def routes in a thread pool
 # Help Functions
 
 
+def names() -> dict[str, str]:
+    with lock:
+        return DbInstance.get_name_map()
+
+def one_per_metric(alerts):
+    seen, out = set(), []
+    for a in alerts:
+        key = (a.astronaut_id, a.metric)
+        if key not in seen:
+            seen.add(key)
+            out.append(a)
+    return out
+
+
+def render_alerts(request: Request):
+    active = DbInstance.get_alerts(None, active_only=True)
+    active.sort(key=lambda a: (-RANK[a.severity], -a.id))
+    active = one_per_metric(active)
+    return templates.TemplateResponse(request, "alerts.html", {"alerts": active, "names": names()})
+
+
+@app.get("/partials/alerts")
+def alerts_partial(request: Request):
+    return render_alerts(request)
+
+
 def collapse_log(snapshot: list[Alert],
                  limit: int = 100) -> list[dict]:
     groups: list[dict] = []
@@ -37,6 +64,7 @@ def collapse_log(snapshot: list[Alert],
             g["count"] += 1
             g["last_ts"] = a.timestamp
             g["message"] = a.message
+            g["value"] = a.value
             g["acknowledged"] = g["acknowledged"] and a.acknowledged
         else:
             g = {
@@ -96,7 +124,7 @@ def post_dummy_vitals(reading: Reading):
                 severity=ev.severity,
                 metric=ev.metric,
                 message=ev.message,
-                timestamp=reading.timestamp
+                timestamp=reading.timestamp,
             ))
             pass
         return {"status": "ok", "stored": reading_count}
@@ -118,6 +146,20 @@ def post_vitals(astronaut_id: str, reading: Reading) -> IngestReadingOutput:
     if astronaut_id != reading.astronaut_id:
         raise ValueError("Astronaut ID is not the same!")
     return ingest_reading(reading)
+
+
+@app.post("/api/astronauts/{astronaut_id}/user")
+def post_user(astronaut_id: str, user: User) -> int:
+    if astronaut_id != user.astronaut_id:
+        raise ValueError("Astronaut ID is not the same!")
+    while lock:
+        return DbInstance.add_user(user=user)
+
+
+@app.get("/api/astronauts/{astronaut_id}/user", status_code=201)
+def get_user(astronaut_id: str) -> User:
+    while lock:
+        return DbInstance.get_user(astronaut_id)
 
 
 @app.get("/api/alerts")
@@ -152,17 +194,47 @@ def acknowledge(alert_id: int) -> int:
     return -1
 
 
+# @app.post("/api/astronauts/{astronaut_id}/alerts/{metric}/acknowledge")
+# def acknowledge_group(request: Request, astronaut_id: str, metric: str):
+#     pending = [a for a in DbInstance.get_alerts(astronaut_id=astronaut_id,
+#                                                 active_only=True)
+#                if a.metric == metric]
+#     for a in pending:
+#         DbInstance.update_alert(a.id, acknowledged=True)
+#     return alerts_partial(request)   # re-render the panel
+
+@app.post("/api/astronauts/{astronaut_id}/alerts/{metric}/acknowledge")
+def acknowledge_group(request: Request, astronaut_id: str, metric: str):
+    with lock:
+        for a in DbInstance.get_alerts(None, astronaut_id=astronaut_id, active_only=True):
+            if a.metric == metric:
+                DbInstance.update_alert(a.id, acknowledged=True)
+    return render_alerts(request)
+
+
 # ---------- HTML partials for the HTMX dashboard
 # (templates are front end's) ----------
+
+# def render_alerts(request: Request):
+#     active = dbInstance.get_alerts(active_only=True)
+#     active.sort(key=lambda a: (-RANK[a.severity], -a.id))
+#     active = one_per_metric(active)
+#     return templates.TemplateResponse(request, "alerts.html", {"alerts": active})
+
 
 @app.get("/partials/alerts")
 def alerts_partial(request: Request):
     with lock:
-        alerts: List[Alert] = DbInstance.get_alerts(None, active_only=True)
-    # critical first, newest first
-    alerts.sort(key=lambda a: (-RANK[a.severity], -a.id))
-    return templates.TemplateResponse(request, "alerts.html",
-                                      {"alerts": alerts})
+        return render_alerts(request)
+
+# @app.get("/partials/alerts")
+# def alerts_partial(request: Request):
+#     with lock:
+#         alerts: List[Alert] = DbInstance.get_alerts(None, active_only=True)
+#     # critical first, newest first
+#     alerts.sort(key=lambda a: (-RANK[a.severity], -a.id))
+#     return templates.TemplateResponse(request, "alerts.html",
+#                                       {"alerts": alerts})
 
 
 @app.get("/partials/vitals")
@@ -171,20 +243,66 @@ def vitals_partial(request: Request):
     with lock:
         latest = DbInstance.get_latest_readings()
         cards = sorted(latest, key=lambda r: r.astronaut_id)
-    return templates.TemplateResponse(request, "vitals.html", {"cards": cards})
+    return templates.TemplateResponse(request, "vitals.html", {"cards": cards, "names": names()})
 
 
 @app.get("/partials/alert-log")
-def alert_log_partial(request: Request, severity: Optional[str] = None):
-    alerts: List[Alert] = []
+def alert_log_partial(request: Request, severity: Optional[str] = None,
+                      hide_stale: bool = False):
     with lock:
-        alerts = DbInstance.get_alerts(None)
-        snapshot = alerts[-500:]  # cap the scan so it stays cheap every 3s
+        snapshot = DbInstance.get_alerts(None)[-500:]
+        current = {r.astronaut_id: r.activity
+                   for r in DbInstance.get_latest_readings()}
+
     groups = collapse_log(snapshot)
+    latest = {r.astronaut_id: r for r in DbInstance.get_latest_readings()}
+    for g in groups:
+        r = latest.get(g["astronaut_id"])
+        g["now_activity"] = r.activity if r else None
+
+    if hide_stale:
+        groups = [g for g in groups if not g["stale"]]
     if severity:
         groups = [g for g in groups if g["severity"] == severity]
-    return templates.TemplateResponse(request, "alert-log.html",
-                                      {"groups": groups})
+    return templates.TemplateResponse(request, "alert-log.html", {"groups": groups, "names": names()})
+
+
+# status colors live next to classify() now
+STATUS_COLOR = {"healthy": "#34d399",
+                "warning": "#fbbf24", "critical": "#f43f5e"}
+DECIMALS = {"spo2": 1, "temp": 1, "resp": 1}  # everything else: 0
+
+
+@app.get("/partials/metric-history")
+def metric_history(request: Request, astronaut_id: str, metric: str,
+                   limit: int = 50, live: bool = False):
+    if metric not in METRIC_INFO:
+        raise HTTPException(404, "Unknown metric")
+    label, unit = METRIC_INFO[metric]
+    readings = DbInstance.get_readings(
+        astronaut_id, limit=limit)  # oldest first
+
+    rows = [{
+        "time": r.timestamp.strftime("%H:%M:%S"),
+        "activity": r.activity,
+        "value": getattr(r, metric),
+        "status": classify(metric, getattr(r, metric), r.activity),
+    } for r in readings]
+
+    ctx = {
+        "astronaut_id": astronaut_id, "metric": metric, "label": label, "unit": unit,
+        "decimals": DECIMALS.get(metric, 0),
+        "rows": rows[::-1],  # table: newest first
+        "chart": {           # chart: oldest first, colors decided server-side
+            "label": f"{label} ({unit})",
+            "labels": [r["time"] for r in rows],
+            "values": [r["value"] for r in rows],
+            "colors": [STATUS_COLOR[r["status"]] for r in rows],
+        },
+        "names": names()
+    }
+    name = "metric-live.html" if live else "metric-modal.html"
+    return templates.TemplateResponse(request, name, ctx)
 
 
 # ---------- Page and redirect ----------

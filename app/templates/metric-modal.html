@@ -1,0 +1,6 @@
+<header>
+  <p class="modal-eyebrow">{{ names.get(astronaut_id,astronaut_id) }} · Real-Time Telemetry History</p>
+  <h2 class="modal-title">{{ label }} ({{ unit }})</h2>
+</header>
+<div class="chart-wrap"><canvas id="historyChart"></canvas></div>
+{% include "metric-live.html" %}

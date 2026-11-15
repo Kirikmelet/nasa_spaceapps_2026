@@ -1,30 +1,321 @@
-/* Space Telemetry Dark Mode Theme */
-body.dashboard-bg {
-    background-color: #000000;
-    background-image: 
-        radial-gradient(at 0% 0%, rgba(28, 28, 30, 0.8) 0px, transparent 50%),
-        radial-gradient(at 100% 0%, rgba(14, 116, 144, 0.15) 0px, transparent 50%);
-    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    -webkit-font-smoothing: antialiased;
+/* /\* Space Telemetry Dark Mode Theme *\/ */
+/* body.dashboard-bg { */
+/*     background-color: #000000; */
+/*     background-image:  */
+/*         radial-gradient(at 0% 0%, rgba(28, 28, 30, 0.8) 0px, transparent 50%), */
+/*         radial-gradient(at 100% 0%, rgba(14, 116, 144, 0.15) 0px, transparent 50%); */
+/*     font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; */
+/*     -webkit-font-smoothing: antialiased; */
+/* } */
+
+/* /\* Rounded Telemetry Card *\/ */
+/* .metric-card { */
+/*     background: rgba(28, 28, 30, 0.85); */
+/*     backdrop-filter: blur(20px); */
+/*     -webkit-backdrop-filter: blur(20px); */
+/*     border-radius: 24px; */
+/*     border: 1px solid rgba(255, 255, 255, 0.08); */
+/*     transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease; */
+/* } */
+
+/* .metric-card:hover { */
+/*     transform: translateY(-2px); */
+/*     border-color: rgba(255, 255, 255, 0.18); */
+/* } */
+
+/* /\* Critical Alert Steady Glow (prevents animation reset flicker on HTMX refresh) *\/ */
+/* .alert-critical { */
+/*     border-color: rgba(255, 59, 48, 0.75); */
+/*     box-shadow: 0 0 16px 2px rgba(255, 59, 48, 0.25); */
+/* } */
+
+/* ---------- Tokens ---------- */
+:root {
+  --text: #ffffff;
+  --text-soft: #e4e4e7;
+  --text-muted: #d4d4d8;
+  --text-dim: #a1a1aa;
+  --text-faint: #71717a;
+
+  --accent: #38bdf8;
+  --ok: #34d399;
+  --warn: #fbbf24;
+  --crit: #f43f5e;
+
+  --line: rgba(255, 255, 255, 0.1);
+  --line-faint: rgba(255, 255, 255, 0.05);
+  --fill-faint: rgba(255, 255, 255, 0.05);
+  --fill-hover: rgba(255, 255, 255, 0.1);
+
+  --radius-card: 24px;
+  --radius-box: 1rem;
 }
 
-/* Rounded Telemetry Card */
+*, *::before, *::after { box-sizing: border-box; }
+
+/* ---------- Page ---------- */
+body.dashboard-bg {
+  margin: 0;
+  min-height: 100vh;
+  padding: 1.5rem;
+  color: var(--text);
+  background-color: #000;
+  background-image:
+    radial-gradient(at 0% 0%, rgba(28, 28, 30, 0.8) 0px, transparent 50%),
+    radial-gradient(at 100% 0%, rgba(14, 116, 144, 0.15) 0px, transparent 50%);
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.page {
+  max-width: 72rem;
+  margin: 0 auto;
+}
+
+.is-hidden { display: none; } /* used by script.js for toggling */
+
+/* ---------- Header ---------- */
+.page-header {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 2rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.page-eyebrow {
+  margin: 0 0 0.25rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.page-title {
+  margin: 0;
+  font-size: 1.875rem;
+  line-height: 2.25rem;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+}
+
+.live-badge {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+  padding: 0.375rem 0.75rem;
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  background: var(--fill-faint);
+  border: 1px solid var(--line);
+  border-radius: 9999px;
+}
+
+.live-dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: var(--ok);
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes pulse { 50% { opacity: 0.5; } }
+
+/* ---------- Layout ---------- */
+.layout {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+.layout-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2.5rem;
+}
+
+.layout-aside { flex-shrink: 0; }
+
+/* ---------- Cards ---------- */
 .metric-card {
-    background: rgba(28, 28, 30, 0.85);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
-    border-radius: 24px;
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+  background: rgba(28, 28, 30, 0.85);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-radius: var(--radius-card);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .metric-card:hover {
-    transform: translateY(-2px);
-    border-color: rgba(255, 255, 255, 0.18);
+  transform: translateY(-2px);
+  border-color: rgba(255, 255, 255, 0.18);
 }
 
-/* Critical Alert Steady Glow (prevents animation reset flicker on HTMX refresh) */
+.placeholder {
+  padding: 1.5rem;
+  font-size: 0.875rem;
+  color: var(--text-dim);
+}
+
+/* Steady glow (no animation, so HTMX refreshes don't flicker) */
 .alert-critical {
-    border-color: rgba(255, 59, 48, 0.75);
-    box-shadow: 0 0 16px 2px rgba(255, 59, 48, 0.25);
+  border-color: rgba(255, 59, 48, 0.75);
+  box-shadow: 0 0 16px 2px rgba(255, 59, 48, 0.25);
+}
+
+/* ---------- Alert log sidebar ---------- */
+.log-panel {
+  display: flex;
+  flex-direction: column;
+  max-height: 85vh;
+}
+
+.log-panel-title {
+  padding: 1rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--line);
+}
+
+.log-panel-body {
+  padding: 0.5rem;
+  overflow-y: auto;
+}
+
+.log-empty {
+  margin: 0;
+  padding: 1rem;
+  font-size: 0.875rem;
+  color: var(--text-faint);
+}
+
+
+/* status names from classify() in status.py */
+.badge--healthy { color: #6ee7b7; background: rgba(16,185,129,.2); border-color: rgba(16,185,129,.3); }
+.badge--warning { color: #fcd34d; background: rgba(245,158,11,.2); border-color: rgba(245,158,11,.3); }
+.badge--critical{ color: #fda4af; background: rgba(244,63,94,.2);  border-color: rgba(244,63,94,.3); }
+.dot--healthy { fill: #34d399; } .dot--warning { fill: #fbbf24; } .dot--critical { fill: #f43f5e; }
+.legend {
+  display: none;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.375rem 0.75rem;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  background: var(--fill-faint);
+  border-radius: 9999px;
+}
+
+.legend-item { display: flex; align-items: center; gap: 0.25rem; }
+
+.legend-dot { width: 0.625rem; height: 0.625rem; border-radius: 50%; }
+.legend-dot--ok   { background: var(--ok); }
+.legend-dot--warn { background: var(--warn); }
+.legend-dot--crit { background: var(--crit); }
+
+
+.chart-box {
+  padding: 1rem;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid var(--line-faint);
+  border-radius: var(--radius-box);
+}
+
+.chart-wrap { position: relative; width: 100%; height: 16rem; }
+
+/* ---------- History table ---------- */
+.history-title {
+  margin: 0 0 0.75rem;
+  padding: 0 0.25rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.history-wrap {
+  overflow: hidden;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-box);
+}
+
+.history-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: 0.875rem;
+}
+
+.history-table thead tr {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  background: var(--fill-faint);
+  border-bottom: 1px solid var(--line);
+}
+
+.history-table th,
+.history-table td { padding: 0.75rem 1rem; }
+
+.history-table tbody { color: var(--text-soft); }
+.history-table tbody tr + tr { border-top: 1px solid var(--line-faint); }
+.history-table tbody tr { transition: background 0.15s ease; }
+.history-table tbody tr:hover { background: var(--fill-faint); }
+
+.cell-time     { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.75rem; color: var(--text-dim); }
+.cell-activity { font-size: 0.75rem; font-weight: 600; text-transform: uppercase; color: var(--text-muted); }
+.cell-value    { font-weight: 700; color: var(--text); }
+.cell-unit     { font-size: 0.75rem; font-weight: 400; color: var(--text-dim); }
+.cell-empty    { padding: 1.5rem 1rem; text-align: center; color: var(--text-faint); }
+
+/* ---------- Status badges ---------- */
+.badge {
+  display: inline-block;
+  padding: 0.125rem 0.625rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  border: 1px solid;
+  border-radius: 9999px;
+}
+.badge--ok   { color: #6ee7b7; background: rgba(16, 185, 129, 0.2); border-color: rgba(16, 185, 129, 0.3); }
+.badge--warn { color: #fcd34d; background: rgba(245, 158, 11, 0.2); border-color: rgba(245, 158, 11, 0.3); }
+.badge--crit { color: #fda4af; background: rgba(244, 63, 94, 0.2);  border-color: rgba(244, 63, 94, 0.3); }
+
+/* ---------- Responsive ---------- */
+@media (min-width: 640px) {
+  .legend { display: flex; }
+}
+
+@media (min-width: 768px) {
+  body.dashboard-bg { padding: 2.5rem; }
+  .page-header { flex-direction: row; justify-content: space-between; align-items: flex-end; }
+  .page-title { font-size: 2.25rem; line-height: 2.5rem; }
+  .live-badge { margin-top: 0; }
+}
+
+@media (min-width: 1024px) {
+  .layout { flex-direction: row; }
+  .layout-aside { width: 20rem; }
+  .log-panel { position: sticky; top: 1.5rem; }
+}
+
+dialog.modal-card {
+  width: min(100% - 2rem, 56rem);
+  max-height: 90vh;
+  margin: auto;                 /* keeps it centered */
+  padding: 1.5rem;
+  overflow-y: auto;
+  color: var(--text);           /* dialogs don't inherit page text color */
+}
+dialog.modal-card:hover { transform: none; }   /* no .metric-card hover lift */
+dialog::backdrop {
+  background: rgba(0, 0, 0, 0.8);
+  backdrop-filter: blur(12px);
 }

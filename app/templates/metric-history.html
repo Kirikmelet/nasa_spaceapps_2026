@@ -1,0 +1,24 @@
+<!-- templates/metric-history.html -->
+ <div hx-get="/partials/metric-history?astronaut_id={{ astronaut_id|urlencode }}&metric={{ metric }}&live=true"
+     hx-trigger="every 1s"
+     hx-swap="outerMorph">
+  <h2>{{ label }} ({{ unit }})</h2>
+
+  <svg viewBox="0 0 {{ chart.w }} {{ chart.h }}" class="chart">
+    <polyline points="{{ chart.line }}" fill="none" stroke="rgba(255,255,255,.25)" stroke-width="2"/>
+    {% for p in chart.points %}
+      <circle cx="{{ p.x }}" cy="{{ p.y }}" r="6" class="dot dot--{{ p.status }}">
+        <title>{{ p.time }}: {{ p.value }}</title>
+      </circle>
+    {% endfor %}
+  </svg>
+
+  <table>
+    {% for r in rows %}
+      <tr><td>{{ r.time }}</td><td>{{ r.activity }}</td>
+          <td>{{ r.value }} {{ unit }}</td><td class="badge badge--{{ r.status }}">{{ r.status|title }}</td></tr>
+    {% else %}
+      <tr><td colspan="4">No records yet.</td></tr>
+    {% endfor %}
+  </table>
+</div>
