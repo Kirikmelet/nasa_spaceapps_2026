@@ -172,6 +172,7 @@ from statistics import mean, stdev
 from typing import Optional
 
 from app.models import Reading
+from app.db import DbInstance
 
 METRICS = ["hr", "spo2", "temp", "bp_sys", "bp_dia", "resp"]
 RANK = {"info": 0, "warning": 1, "critical": 2}
@@ -221,7 +222,9 @@ def as_utc(dt: datetime) -> datetime:
 
 def crew_name(astronaut_id: str) -> str:
     """astro_1 -> Astro 1, AST-001 -> Ast 001"""
-    return astronaut_id.replace("_", " ").replace("-", " ").title()
+    return DbInstance.get_name_map().get(astronaut_id,
+                                         astronaut_id.replace("_", " ")
+                                         .replace("-", " ").title())
 
 
 def fmt(metric: str, value: float) -> str:
@@ -280,7 +283,8 @@ class BaselineDetector:
         self.consecutive = consecutive
         self.adapt_after = adapt_after
         self.streak = 0
-        self.last_mean: Optional[float] = None  # baseline mean at the last check
+        # baseline mean at the last check
+        self.last_mean: Optional[float] = None
 
     def update(self, x: float) -> Optional[float]:
         """Return the z-score once an anomaly is confirmed, else None."""
@@ -289,7 +293,8 @@ class BaselineDetector:
             return None
         mu = mean(self.values)
         self.last_mean = mu
-        sd = max(stdev(self.values), 0.01 * abs(mu), 1e-6)  # floor avoids divide-by-~0
+        sd = max(stdev(self.values), 0.01 * abs(mu),
+                 1e-6)  # floor avoids divide-by-~0
         z = (x - mu) / sd
         if abs(z) > self.z_threshold:
             self.streak += 1
@@ -314,7 +319,8 @@ class _Open:
 class AlertEngine:
     def __init__(self, escalate_after: timedelta = timedelta(minutes=5)):
         self.escalate_after = escalate_after
-        self._detectors = {}  # (astronaut, metric, activity) -> BaselineDetector
+        # (astronaut, metric, activity) -> BaselineDetector
+        self._detectors = {}
         self._open = {}       # (astronaut, metric) -> _Open
 
     def process(self, r: Reading) -> list[AlertEvent]:
@@ -327,7 +333,8 @@ class AlertEngine:
             value = getattr(r, metric)
             key = (r.astronaut_id, metric)
 
-            sev, msg = check_hard_limits(metric, value, activity, r.astronaut_id)
+            sev, msg = check_hard_limits(
+                metric, value, activity, r.astronaut_id)
 
             # Only learn from readings inside the hard limits, so faults
             # never poison the baseline.
@@ -355,7 +362,8 @@ class AlertEngine:
             elif state.escalated:
                 continue  # already escalated by time; stay critical until cleared
             elif RANK[sev] < RANK[state.severity]:
-                self._open[key] = _Open(sev, ts)  # de-escalated: re-arm, no new event
+                # de-escalated: re-arm, no new event
+                self._open[key] = _Open(sev, ts)
             elif sev == "warning" and ts - state.since >= self.escalate_after:
                 state.severity = "critical"
                 state.escalated = True

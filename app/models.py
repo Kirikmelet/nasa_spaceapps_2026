@@ -14,6 +14,8 @@ class ThresholdRange(BaseModel):
     normal_max: float
     warning_low: float
     warning_high: float
+    critical_low: Optional[float] = None    # None = no critical bound
+    critical_high: Optional[float] = None
 
 
 NASA_DATA: dict[MetricType, dict[ActivityType, ThresholdRange]] = {
@@ -105,7 +107,7 @@ NASA_DATA: dict[MetricType, dict[ActivityType, ThresholdRange]] = {
 
 
 class User(BaseModel):
-    id: Optional[int]
+    id: Optional[int] = None
     astronaut_id: str
     name: str
 
@@ -120,14 +122,18 @@ class Reading(BaseModel):
     bp_sys: float      # systolic blood pressure
     bp_dia: float      # diastolic blood pressure
     resp: float        # respiration rate, breaths/min
-    activity: Literal["rest", "sleep", "exercise", "eva"] = "rest"
+    activity: ActivityType = "rest"
+    origin_id: Optional[int] = None   # lets the log use a stable id across revisions
 
 
 class Alert(BaseModel):
     id: Optional[int] = None
     astronaut_id: str
-    severity: Literal["info", "warning", "critical"]
-    metric: str
+    severity: SeverityType
+    metric: MetricType
     message: str
     timestamp: datetime
     acknowledged: bool = False
+    activity: ActivityType = "rest"
+    value: Optional[value] = None
+    origin_id: Optional[int] = None

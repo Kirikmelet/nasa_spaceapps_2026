@@ -45,6 +45,10 @@ from datetime import datetime
 
 import requests
 
+
+# set from args.url in main(): global BASE; BASE = args.url.rstrip("/")
+BASE = "http://localhost:8000"
+
 # Per-astronaut resting baselines: (mean, std). All inside the engine's rest limits.
 PROFILES = {
     "astro_1": {"hr": (70, 2.0), "spo2": (98, 0.5), "temp": (36.8, 0.10),
@@ -67,17 +71,23 @@ ACTIVITY_OFFSETS = {
 
 # Fault name -> {metric: target mean}. Noise uses the astronaut's normal std.
 FAULTS = {
-    "hr":     {"hr": 95},                     # below rest warn_high (100): only the baseline detector catches it
-    "hrhigh": {"hr": 140},                    # above rest critical_high (130), below exercise warn_high (170)
+    # below rest warn_high (100): only the baseline detector catches it
+    "hr":     {"hr": 95},
+    # above rest critical_high (130), below exercise warn_high (170)
+    "hrhigh": {"hr": 140},
     "spo2":   {"spo2": 85},                   # below critical_low (90)
-    "temp":   {"temp": 38.2},                 # above warn_high (37.8), below critical (39.0)
+    # above warn_high (37.8), below critical (39.0)
+    "temp":   {"temp": 38.2},
     "fever":  {"temp": 39.5},                 # above critical_high (39.0)
-    "bp":     {"bp_sys": 150, "bp_dia": 95},  # above warn_high (140/90), below critical (180/120)
-    "resp":   {"resp": 24},                   # above warn_high (20), below critical (30)
+    # above warn_high (140/90), below critical (180/120)
+    "bp":     {"bp_sys": 150, "bp_dia": 95},
+    # above warn_high (20), below critical (30)
+    "resp":   {"resp": 24},
 }
 
 faults = {}            # astronaut_id -> fault name
-activities = {}        # astronaut_id -> "rest" | "sleep" | "exercise" (default rest)
+# astronaut_id -> "rest" | "sleep" | "exercise" (default rest)
+activities = {}
 state_lock = threading.Lock()
 
 
@@ -87,7 +97,8 @@ def make_reading(astro_id):
         fault = faults.get(astro_id)
         activity = activities.get(astro_id, "rest")
     offsets = ACTIVITY_OFFSETS[activity]
-    vals = {m: random.gauss(mean + offsets.get(m, 0), std) for m, (mean, std) in p.items()}
+    vals = {m: random.gauss(mean + offsets.get(m, 0), std)
+            for m, (mean, std) in p.items()}
     if fault in FAULTS:
         for metric, target in FAULTS[fault].items():
             vals[metric] = random.gauss(target, p[metric][1])
@@ -109,7 +120,8 @@ def set_fault(kind, astro_id=None):
     with state_lock:
         for a in targets:
             if a not in PROFILES:
-                print(f"  unknown astronaut '{a}' (have: {', '.join(PROFILES)})")
+                print(
+                    f"  unknown astronaut '{a}' (have: {', '.join(PROFILES)})")
                 continue
             if kind == "clear":
                 faults.pop(a, None)
@@ -134,21 +146,36 @@ def clear_all():
     print("  all faults cleared")
 
 
+def rename(astro_id, name):
+    try:
+        r = requests.post(f"{BASE}/api/astronauts/{astro_id}/user",
+                         json={"name": name, "astronaut_id": astro_id}, timeout=5)
+        print(
+            f"  {astro_id}: name -> {name}" if r.ok else f"  rename failed: HTTP {r.status_code} {r.text[:120]}")
+    except requests.RequestException as e:
+        print(f"  server not reachable ({e.__class__.__name__})")
+
+
 HELP = ("  faults: hr | hrhigh | spo2 | temp | fever | bp | resp  [id]  |  clear [id]\n"
-        "  activity: rest | sleep | exercise  [id]  |  quit")
+        "  activity: rest | sleep | exercise  [id]  | rename [id] [name] | quit")
 
 
 def command_loop():
     while True:
         try:
-            line = input().strip().lower()
+            raw = input().strip()
         except EOFError:
             return
-        if not line:
+        if not raw:
             continue
-        parts = line.split()
-        cmd, arg = parts[0], (parts[1] if len(parts) > 1 else None)
-        if cmd in FAULTS:
+        parts = raw.split()
+        cmd = parts[0].lower()
+        arg = parts[1].lower() if len(
+            parts) > 1 else None   # ids stay lowercase
+
+        if cmd == "rename" and len(parts) >= 3:
+            rename(arg, " ".join(parts[2:]))
+        elif cmd in FAULTS:
             set_fault(cmd, arg)
         elif cmd in ACTIVITY_OFFSETS:
             set_activity(cmd, arg)
@@ -166,11 +193,16 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--url", default="http://localhost:8000")
     ap.add_argument("--interval", type=float, default=2.0)
-    ap.add_argument("--hr-fault-at", type=float, help="seconds after start: inject HR drift on astro_1")
-    ap.add_argument("--spo2-fault-at", type=float, help="seconds after start: inject SpO2 drop on astro_2")
+    ap.add_argument("--hr-fault-at", type=float,
+                    help="seconds after start: inject HR drift on astro_1")
+    ap.add_argument("--spo2-fault-at", type=float,
+                    help="seconds after start: inject SpO2 drop on astro_2")
     args = ap.parse_args()
 
-    endpoint = args.url.rstrip("/") + "/api/dummy/vitals"
+    global BASE
+    BASE = args.url.rstrip("/")
+
+    endpoint = BASE + "/api/dummy/vitals"
     start = time.time()
     scheduled = []
     if args.hr_fault_at is not None:
@@ -179,7 +211,8 @@ def main():
         scheduled.append([args.spo2_fault_at, "spo2", "astro_2"])
 
     threading.Thread(target=command_loop, daemon=True).start()
-    print(f"Posting to {endpoint} every {args.interval}s for {', '.join(PROFILES)}.")
+    print(
+        f"Posting to {endpoint} every {args.interval}s for {', '.join(PROFILES)}.")
     print(HELP + "\n  (warm up ~60 s first)")
 
     session = requests.Session()
@@ -194,11 +227,13 @@ def main():
 
         for astro_id in PROFILES:
             try:
-                r = session.post(endpoint, json=make_reading(astro_id), timeout=5)
+                r = session.post(
+                    endpoint, json=make_reading(astro_id), timeout=5)
                 if r.status_code != 200:
                     print(f"  {astro_id}: HTTP {r.status_code} {r.text[:200]}")
             except requests.RequestException as e:
-                print(f"  server not reachable ({e.__class__.__name__}); retrying...")
+                print(
+                    f"  server not reachable ({e.__class__.__name__}); retrying...")
                 break
         n += 1
         if n % 10 == 0:

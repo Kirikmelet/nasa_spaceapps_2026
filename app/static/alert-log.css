@@ -1,0 +1,50 @@
+.log-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.log-item {
+  padding: 0.75rem;
+  background: var(--fill-faint);
+  border-left: 4px solid var(--accent);   /* info (sky) is the default */
+  border-radius: 0.75rem;
+}
+.log-item--critical { border-left-color: #f43f5e; }
+.log-item--warning  { border-left-color: #fbbf24; }
+.log-item--info     { border-left-color: #38bdf8; }
+.log-item.is-acked  { opacity: 0.5; }
+.log-item.is-stale { opacity: 0.4; border-left-style: dashed; }
+
+.log-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.75rem;
+  color: var(--text-dim);
+}
+.log-time { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.log-sev  { font-weight: 600; text-transform: uppercase; }
+
+.log-who {
+  margin-top: 0.25rem;
+  font-size: 0.875rem;
+  color: var(--text);
+}
+.log-metric { text-transform: uppercase; color: var(--text-muted); }
+.log-count  { font-size: 0.75rem; color: var(--text-dim); }
+
+.log-msg {
+  margin-top: 0.125rem;
+  font-size: 0.75rem;
+  color: var(--text-dim);
+}
+
+.log-ack {
+  margin-top: 0.25rem;
+  font-size: 0.75rem;
+  color: var(--ok);
+}

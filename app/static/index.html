@@ -4,123 +4,68 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>NASA Astronaut Health Dashboard</title>
-  <script src="https://unpkg.com/htmx.org@2.0.4"></script>
-  <!-- Load Idiomorph extension for smooth, flicker-free DOM morphing -->
-  <script src="https://unpkg.com/idiomorph@0.3.0/dist/idiomorph-ext.min.js"></script>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <!-- Load Chart.js for interactive line charts -->
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/htmx.org@4.0.1/dist/htmx.min.js" integrity="sha384-Qp9rdC8H7EqOoX+nR0P3RPG2Noji+qdwJlGpfzwQJsfOpp3sGwIdSP9xO3+UlEhn" crossorigin="anonymous"></script>
   <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="vitals.css">
+  <link rel="stylesheet" href="alert-log.css">
+  <link rel="stylesheet" href="alerts.css">
 </head>
-<body hx-ext="morph" class="dashboard-bg text-white min-h-screen p-6 md:p-10">
+<body  class="dashboard-bg">
 
-  <div class="max-w-6xl mx-auto">
-    <!-- Dashboard Header -->
-    <header class="flex flex-col md:flex-row md:justify-between md:items-end mb-8 pb-4 border-b border-white/10">
+  <div class="page">
+    <header class="page-header">
       <div>
-        <p class="text-xs uppercase tracking-widest text-sky-400 font-semibold mb-1">Simulated Telemetry</p>
-        <h1 class="text-3xl md:text-4xl font-bold tracking-tight">Crew Health Summary</h1>
+        <p class="page-eyebrow">Simulated Telemetry</p>
+        <h1 class="page-title">Crew Health Summary</h1>
       </div>
-      <div class="mt-3 md:mt-0 flex items-center gap-2 text-xs text-zinc-400 bg-white/5 px-3 py-1.5 rounded-full border border-white/10">
-        <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+      <div class="live-badge">
+        <span class="live-dot"></span>
         <span>Live Stream (3s Interval)</span>
       </div>
     </header>
 
-    <div class="max-w-7xl mx-auto flex flex-col lg:flex-row gap-8">
-    <main class="flex-1 space-y-10 min-w-0">
-      <!-- 1. Alerts Section -->
-      <section id="alerts-section"
-               hx-get="/partials/alerts"
-               hx-trigger="load, every 3s"
-               hx-swap="morph:innerHTML">
-        <div class="metric-card p-6 text-zinc-400 text-sm">Loading health alerts...</div>
-      </section>
+    <div class="layout">
+      <main class="layout-main">
+        <!-- Must stay a sibling BEFORE #alerts-section, outside the polled area -->
+        <input type="checkbox" id="alerts-open" class="alerts-toggle" aria-hidden="true" tabindex="-1">
 
-      <!-- 2. Vitals Section -->
-      <section id="vitals-section"
-               hx-get="/partials/vitals"
-               hx-trigger="load, every 3s"
-               hx-swap="morph:innerHTML">
-        <div class="metric-card p-6 text-zinc-400 text-sm">Loading vital signs telemetry...</div>
-      </section>
-    </main>
-    <aside class="lg:w-80 shrink-0">
-    <div class="metric-card lg:sticky lg:top-6 flex flex-col max-h-[85vh]">
-      <div class="p-4 border-b border-white/10 text-sm font-semibold uppercase tracking-wider text-zinc-300">
-        Alert Log
-      </div>
-      <div id="alert-log"
-           class="overflow-y-auto p-2"
-           hx-get="/partials/alert-log"
-           hx-trigger="load, every 3s"
-           hx-swap="morph:innerHTML">
-        <p class="p-4 text-sm text-zinc-500">Loading log...</p>
-      </div>
-    </div>
-    </aside>
-    </div>
-  </div>
+        <section id="alerts-section"
+                 hx-get="/partials/alerts"
+          hx-trigger="load, every 1s"
+	  hx-sync="this:replace"
+                 hx-swap="innerMorph">
+          <div class="metric-card placeholder">Loading health alerts...</div>
+        </section>
 
-  <!-- Metric Detail Modal (Line Chart on Top + History Log Below) -->
-  <div id="metric-modal" class="fixed inset-0 z-50 hidden bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
-    <div class="metric-card w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden border border-white/15 shadow-2xl">
-      
-      <!-- Modal Header -->
-      <div class="flex justify-between items-center p-6 border-b border-white/10">
-        <div>
-          <p id="modal-subtitle" class="text-xs uppercase tracking-wider text-zinc-400 font-semibold"></p>
-          <h2 id="modal-title" class="text-2xl font-bold text-white mt-0.5">Metric History</h2>
-        </div>
-        <div class="flex items-center gap-4">
-          <!-- Legend for Red / Yellow / Green points -->
-          <div class="hidden sm:flex items-center gap-3 text-xs text-zinc-300 bg-white/5 px-3 py-1.5 rounded-full">
-            <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-emerald-400"></span>Healthy</span>
-            <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-amber-400"></span>Warning</span>
-            <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-rose-500"></span>Critical</span>
-          </div>
-          <button onclick="closeMetricModal()" class="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-zinc-300 hover:text-white transition">
-            ✕
-          </button>
-        </div>
-      </div>
+        <section id="vitals-section"
+                 hx-get="/partials/vitals"
+                 hx-trigger="load, every 1s"
+                 hx-swap="innerMorph">
+          <div class="metric-card placeholder">Loading vital signs telemetry...</div>
+        </section>
+      </main>
 
-      <!-- Modal Body: Line Chart (Top) + History Table (Bottom) -->
-      <div class="p-6 overflow-y-auto space-y-6">
-        
-        <!-- TOP: Line Chart Container -->
-        <div class="bg-black/40 p-4 rounded-2xl border border-white/5">
-          <div class="h-64 w-full relative">
-            <canvas id="historyChart"></canvas>
+      <aside class="layout-aside">
+        <div class="metric-card log-panel">
+          <div class="log-panel-title">Alert Log</div>
+          <div id="alert-log"
+               class="log-panel-body"
+               hx-get="/partials/alert-log"
+               hx-trigger="load, every 1s"
+               hx-swap="innerMorph">
+            <p class="log-empty">Loading log...</p>
           </div>
         </div>
-
-        <!-- BOTTOM: Historical Records List -->
-        <div>
-          <h3 class="text-sm font-semibold text-zinc-300 mb-3 px-1">Historical Telemetry Log (Newest First)</h3>
-          <div class="overflow-hidden rounded-2xl border border-white/10 bg-black/30">
-            <table class="w-full text-left border-collapse text-sm">
-              <thead>
-                <tr class="border-b border-white/10 text-xs uppercase text-zinc-400 bg-white/5">
-                  <th class="py-3 px-4">Time</th>
-                  <th class="py-3 px-4">Activity</th>
-                  <th class="py-3 px-4">Value</th>
-                  <th class="py-3 px-4">Status</th>
-                </tr>
-              </thead>
-              <tbody id="history-table-body" class="divide-y divide-white/5 text-zinc-200">
-                <!-- Populated dynamically via JS -->
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-      </div>
+      </aside>
     </div>
   </div>
 
-  <script type="text/javascript" src="./script.js">
-  </script>
+  <!-- Metric detail modal: the server fills #modal-content -->
+  <dialog id="metric-modal" class="metric-card modal-card">
+    <button class="modal-close" data-close-modal aria-label="Close">✕</button>
+    <div id="modal-content"></div>
+  </dialog>
+
+  <script type="module" src="./app.js"></script>
 </body>
 </html>
-

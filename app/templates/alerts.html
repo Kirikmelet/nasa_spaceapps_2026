@@ -1,82 +1,52 @@
-<div class="space-y-3" id="alerts-container">
-  <h2 class="text-lg font-semibold text-zinc-200 px-2 flex items-center gap-2">
-    <span>🔔</span> Active Health Alerts
-  </h2>
+<div class="alerts" id="alerts-container">
+  <h2 class="alerts-title"><span>🔔</span> Active Health Alerts</h2>
 
   {% if alerts %}
-    {% set seen = [] %}
-    {% set unique_alerts = [] %}
-    {% for a in alerts %}
-      {% set key = a.astronaut_id ~ ':' ~ a.metric %}
-      {% if key not in seen %}
-        {% set _ = seen.append(key) %}
-        {% set _ = unique_alerts.append(a) %}
-      {% endif %}
-    {% endfor %}
+    {% set top = alerts[0].severity %}
 
-    {% set top_sev = unique_alerts[0].severity %}
-
-  
-    <div id="alerts-summary-bar"
-         onclick="toggleAlertsPanel()"
-         class="metric-card p-4 flex items-center justify-between cursor-pointer select-none hover:bg-white/5 transition
-         {% if top_sev == 'critical' %} alert-critical
-         {% elif top_sev == 'warning' %} border-amber-500/50
-         {% else %} border-sky-500/40 {% endif %}">
-      
-      <div class="flex items-center gap-3">
-        <span class="px-2.5 py-1 rounded-full text-xs font-bold uppercase tracking-wider
-          {% if top_sev == 'critical' %} bg-rose-500 text-white
-          {% elif top_sev == 'warning' %} bg-amber-400 text-black
-          {% else %} bg-sky-400 text-black {% endif %}">
-          {{ unique_alerts|length }} Active Alert{% if unique_alerts|length > 1 %}s{% endif %}
+    <label for="alerts-open" id="alerts-summary-bar"
+           class="metric-card alerts-summary alert-{{ top }}">
+      <div class="alerts-summary-left">
+        <span class="sev-pill sev-pill--{{ top }}">
+          {{ alerts|length }} Active Alert{% if alerts|length > 1 %}s{% endif %}
         </span>
-        <span class="text-sm font-medium text-zinc-200">
-          Highest Severity: <strong class="uppercase text-white">{{ top_sev }}</strong>
+        <span class="alerts-summary-text">
+          Highest Severity: <strong>{{ top }}</strong>
         </span>
       </div>
-
-      <div class="flex items-center gap-2 text-xs text-zinc-400">
-        <span id="alerts-toggle-text">Click to expand</span>
-        <span id="alerts-toggle-icon" class="transition-transform duration-200">▼</span>
+      <div class="alerts-summary-right">
+        <span class="when-closed">Click to expand</span>
+        <span class="when-open">Click to collapse</span>
+        <span class="alerts-icon">▼</span>
       </div>
-    </div>
+    </label>
 
-    <!-- 具体警告列表（默认 hidden 折叠隐藏，点击头部栏才展开） -->
-    <div id="alerts-list" class="space-y-3 pt-1 hidden">
-      {% for a in unique_alerts %}
-        <div id="alert-card-{{ a.astronaut_id }}-{{ a.metric }}"
-             class="metric-card p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4
-          {% if a.severity == 'critical' %} alert-critical
-          {% elif a.severity == 'warning' %} border-amber-500/50
-          {% else %} border-sky-500/40 {% endif %}">
-          
-          <div class="flex items-start gap-3">
-            <span class="px-2.5 py-1 rounded-full text-xs font-bold uppercase tracking-wider
-              {% if a.severity == 'critical' %} bg-rose-500 text-white
-              {% elif a.severity == 'warning' %} bg-amber-400 text-black
-              {% else %} bg-sky-400 text-black {% endif %}">
-              {{ a.severity }}
-            </span>
-            <div>
-              <div class="text-sm font-semibold text-white">
-                {{ a.astronaut_id }} · <span class="uppercase text-zinc-300">{{ a.metric }}</span>
-              </div>
-              <div class="text-sm text-zinc-300 mt-0.5">{{ a.message }}</div>
-              <div class="text-xs text-zinc-500 mt-1">{{ a.timestamp.strftime('%H:%M:%S') }}</div>
+    <div id="alerts-list" class="alerts-list">
+      {% for a in alerts %}
+      <div id="alert-card-{{ a.astronaut_id }}-{{ a.metric }}"
+           class="metric-card alert-card alert-{{ a.severity }}">
+        <div class="alert-main">
+          <span class="sev-pill sev-pill--{{ a.severity }}">{{ a.severity }}</span>
+          <div>
+            <div class="alert-who">
+              {{ names.get(a.astronaut_id, a.astronaut_id) }} · <span class="alert-metric">{{ a.metric }}</span>
             </div>
+            <div class="alert-msg">{{ a.message }}</div>
+            <div class="alert-time">{{ a.timestamp.strftime('%H:%M:%S') }}</div>
           </div>
-
-          <button type="button"
-                  onclick="acknowledgeAlertGroup('{{ a.astronaut_id }}', '{{ a.metric }}', {{ a.id }}, this)"
-                  class="px-4 py-2 rounded-full bg-white/10 hover:bg-white/20 text-xs font-medium text-white transition shrink-0">
-            Acknowledge
-          </button>
         </div>
+
+        <button type="button" class="btn-ack"
+                hx-post="/api/astronauts/{{ a.astronaut_id|urlencode }}/alerts/{{ a.metric }}/acknowledge"
+                hx-target="#alerts-section" hx-swap="outerMorph">
+          Acknowledge
+        </button>
+      </div>
       {% endfor %}
     </div>
+
   {% else %}
-    <div id="alerts-empty" class="metric-card p-5 flex items-center gap-3 text-emerald-400 text-sm">
+    <div id="alerts-empty" class="metric-card alerts-empty">
       <span>✅</span>
       <span>All crew vital signs are within nominal parameters. No active alerts.</span>
     </div>
