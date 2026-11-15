@@ -28,6 +28,33 @@ HR_LIMITS = {
 }
 
 
+# Readable names and units for alert messages (written for a flight surgeon).
+METRIC_INFO = {
+    "hr": ("heart rate", "bpm"),
+    "spo2": ("blood oxygen", "%"),
+    "temp": ("body temperature", "°C"),
+    "bp_sys": ("systolic blood pressure", "mmHg"),
+    "bp_dia": ("diastolic blood pressure", "mmHg"),
+    "resp": ("breathing rate", "breaths/min"),
+}
+ACTIVITY_PHRASE = {"rest": "at rest", "sleep": "during sleep",
+                   "exercise": "during exercise", "eva": "during EVA"}
+
+
+def crew_name(astronaut_id: str) -> str:
+    """astro_1 -> Astro 1"""
+    return astronaut_id.replace("_", " ").title()
+
+
+def fmt(metric: str, value: float) -> str:
+    """Value with unit, e.g. 95 bpm, 85%, 38.2 °C."""
+    unit = METRIC_INFO[metric][1]
+    v = f"{value:.1f}" if metric in ("temp", "spo2") else f"{value:.0f}"
+    if v.endswith(".0") and metric == "spo2":
+        v = v[:-2]
+    return f"{v}{unit}" if unit == "%" else f"{v} {unit}"
+
+
 @dataclass
 class AlertEvent:
     severity: str
@@ -35,19 +62,24 @@ class AlertEvent:
     message: str
 
 
-def check_hard_limits(metric: str, value: float, activity: str):
+def check_hard_limits(metric: str, value: float, activity: str, astronaut_id: str = "astronaut"):
     """Return (severity, message) if value breaks an absolute limit, else (None, '')."""
     lims = HR_LIMITS[activity] if metric == "hr" else DEFAULT_LIMITS[metric]
     crit_lo, warn_lo, warn_hi, crit_hi = lims
-    ctx = f"during {activity}"
+    who = f"{crew_name(astronaut_id)}'s {METRIC_INFO[metric][0]}"
+    ctx = ACTIVITY_PHRASE.get(activity, f"during {activity}")
     if crit_lo is not None and value < crit_lo:
-        return "critical", f"{metric} {value:g} below critical limit {crit_lo:g} {ctx}"
+        return "critical", (f"{who} is critically low {ctx} "
+                            f"({fmt(metric, value)}, safe minimum {fmt(metric, crit_lo)})")
     if crit_hi is not None and value > crit_hi:
-        return "critical", f"{metric} {value:g} above critical limit {crit_hi:g} {ctx}"
+        return "critical", (f"{who} is critically high {ctx} "
+                            f"({fmt(metric, value)}, safe maximum {fmt(metric, crit_hi)})")
     if warn_lo is not None and value < warn_lo:
-        return "warning", f"{metric} {value:g} below {warn_lo:g} {ctx}"
+        return "warning", (f"{who} is low {ctx} "
+                           f"({fmt(metric, value)}, normal minimum {fmt(metric, warn_lo)})")
     if warn_hi is not None and value > warn_hi:
-        return "warning", f"{metric} {value:g} above {warn_hi:g} {ctx}"
+        return "warning", (f"{who} is high {ctx} "
+                           f"({fmt(metric, value)}, normal maximum {fmt(metric, warn_hi)})")
     return None, ""
 
 
@@ -65,6 +97,7 @@ class BaselineDetector:
         self.z_threshold = z_threshold
         self.consecutive = consecutive
         self.streak = 0
+        self.last_mean: Optional[float] = None  # baseline mean at the last check
 
     def update(self, x: float) -> Optional[float]:
         """Return the z-score once an anomaly is confirmed, else None."""
@@ -72,6 +105,7 @@ class BaselineDetector:
             self.values.append(x)
             return None
         mu = mean(self.values)
+        self.last_mean = mu
         sd = max(stdev(self.values), 0.01 * abs(mu), 1e-6)  # floor avoids divide-by-~0
         z = (x - mu) / sd
         if abs(z) > self.z_threshold:
@@ -101,7 +135,7 @@ class AlertEngine:
             value = getattr(r, metric)
             key = (r.astronaut_id, metric)
 
-            sev, msg = check_hard_limits(metric, value, r.activity)
+            sev, msg = check_hard_limits(metric, value, r.activity, r.astronaut_id)
 
             det = self._detectors.setdefault(
                 (r.astronaut_id, metric, r.activity), BaselineDetector())
@@ -109,8 +143,11 @@ class AlertEngine:
             if sev is None and z is not None:
                 # Inside normal limits but unusual for THIS astronaut in THIS activity.
                 sev = "warning" if abs(z) >= 4 else "info"
-                msg = (f"{metric} {value:g} deviates from {r.astronaut_id}'s "
-                       f"{r.activity} baseline (z={z:+.1f})")
+                direction = "high" if z > 0 else "low"
+                msg = (f"{crew_name(r.astronaut_id)}'s {METRIC_INFO[metric][0]} is "
+                       f"unusually {direction} for them "
+                       f"{ACTIVITY_PHRASE.get(r.activity, r.activity)} "
+                       f"({fmt(metric, value)}, usually about {fmt(metric, det.last_mean)})")
 
             state = self._open.get(key)
             if sev is None:
@@ -125,5 +162,5 @@ class AlertEngine:
                 state.severity = "critical"
                 mins = (r.timestamp - state.since).total_seconds() / 60
                 events.append(AlertEvent(
-                    "critical", metric, f"{msg} (unresolved for {mins:.0f} min, escalated)"))
+                    "critical", metric, f"{msg}. Unresolved for {mins:.0f} min, escalated to critical"))
         return events
