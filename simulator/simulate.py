@@ -3,12 +3,13 @@
 Posts one reading per astronaut every --interval seconds to POST /vitals.
 Talks to the server only through the HTTP API.
 
-Usage (server must be running: uvicorn app.main:app --reload):
+Usage (server must be running: python -m uvicorn app.main:app --reload):
     python simulator/simulate.py
     python simulator/simulate.py --url http://localhost:8000 --interval 2
 
 Fault injection while it runs (type a command + Enter in this terminal):
     hr [astro_id]     resting HR drifts to ~95 (no hard limit; baseline detector flags it)
+    hrhigh [astro_id] HR ~140 (critical at rest, normal during exercise)
     spo2 [astro_id]   SpO2 drops to ~85 (hard-limit critical)
     temp [astro_id]   low fever, ~38.2 C (hard-limit warning)
     fever [astro_id]  high fever, ~39.5 C (hard-limit critical)
@@ -16,13 +17,24 @@ Fault injection while it runs (type a command + Enter in this terminal):
     resp [astro_id]   fast breathing, ~24/min (hard-limit warning)
     clear [astro_id]  back to normal (omit id to clear all)
 Unresolved warnings escalate to critical after 5 minutes (good demo).
+
+Activity (changes the astronaut's normal vitals and the reading's activity):
+    rest [astro_id]
+    sleep [astro_id]
+    exercise [astro_id]
+
+Context-aware demo: `exercise astro_2` (HR ~130-140, no alert), then
+`hrhigh astro_1` (same HR at rest -> critical).
+
     quit
 
 Or script it: --hr-fault-at 60 --spo2-fault-at 120 (seconds after start).
 
-NOTE: activity stays "rest" on purpose. The engine's non-HR limits are not
-activity-aware yet, so exercise/eva vitals would spam alerts.
+NOTE: the engine's non-HR limits are not activity-aware yet, so the activity
+offsets below keep temp, resp and BP inside the rest limits.
 Allow ~40-60 s of warm-up so each baseline has 20+ samples before faults.
+Baselines are per activity, so baseline alerts pause ~40 s after a switch
+(hard limits still work immediately).
 """
 import argparse
 import random
@@ -43,25 +55,39 @@ PROFILES = {
                 "bp_sys": (124, 3.0), "bp_dia": (80, 2.0), "resp": (15, 0.8)},
 }
 
-# Fault name -> {metric: target mean}. Noise uses the astronaut's normal std.
-FAULTS = {
-    "hr":    {"hr": 95},                     # below rest warn_high (100): only the baseline detector catches it
-    "spo2":  {"spo2": 85},                   # below critical_low (90)
-    "temp":  {"temp": 38.2},                 # above warn_high (37.8), below critical (39.0)
-    "fever": {"temp": 39.5},                 # above critical_high (39.0)
-    "bp":    {"bp_sys": 150, "bp_dia": 95},  # above warn_high (140/90), below critical (180/120)
-    "resp":  {"resp": 24},                   # above warn_high (20), below critical (30)
+# Activity -> {metric: offset added to the astronaut's own resting mean}.
+# Offsets (not fixed values) keep each astronaut's baseline personal.
+# Exercise stays under the fixed non-HR limits: resp < 20, bp_sys < 140,
+# bp_dia < 90, temp < 37.8. Sleep stays above resp 10 and HR 45.
+ACTIVITY_OFFSETS = {
+    "rest":     {},
+    "sleep":    {"hr": -8, "resp": -1, "bp_sys": -6, "bp_dia": -4, "temp": -0.2},
+    "exercise": {"hr": 70, "resp": 3, "bp_sys": 6, "bp_dia": 4, "temp": 0.3},
 }
 
-faults = {}  # astronaut_id -> "hr" | "spo2"
-faults_lock = threading.Lock()
+# Fault name -> {metric: target mean}. Noise uses the astronaut's normal std.
+FAULTS = {
+    "hr":     {"hr": 95},                     # below rest warn_high (100): only the baseline detector catches it
+    "hrhigh": {"hr": 140},                    # above rest critical_high (130), below exercise warn_high (170)
+    "spo2":   {"spo2": 85},                   # below critical_low (90)
+    "temp":   {"temp": 38.2},                 # above warn_high (37.8), below critical (39.0)
+    "fever":  {"temp": 39.5},                 # above critical_high (39.0)
+    "bp":     {"bp_sys": 150, "bp_dia": 95},  # above warn_high (140/90), below critical (180/120)
+    "resp":   {"resp": 24},                   # above warn_high (20), below critical (30)
+}
+
+faults = {}            # astronaut_id -> fault name
+activities = {}        # astronaut_id -> "rest" | "sleep" | "exercise" (default rest)
+state_lock = threading.Lock()
 
 
 def make_reading(astro_id):
     p = PROFILES[astro_id]
-    vals = {m: random.gauss(mean, std) for m, (mean, std) in p.items()}
-    with faults_lock:
+    with state_lock:
         fault = faults.get(astro_id)
+        activity = activities.get(astro_id, "rest")
+    offsets = ACTIVITY_OFFSETS[activity]
+    vals = {m: random.gauss(mean + offsets.get(m, 0), std) for m, (mean, std) in p.items()}
     if fault in FAULTS:
         for metric, target in FAULTS[fault].items():
             vals[metric] = random.gauss(target, p[metric][1])
@@ -74,13 +100,13 @@ def make_reading(astro_id):
         "bp_sys": round(vals["bp_sys"]),
         "bp_dia": round(vals["bp_dia"]),
         "resp": round(vals["resp"]),
-        "activity": "rest",
+        "activity": activity,
     }
 
 
 def set_fault(kind, astro_id=None):
     targets = [astro_id] if astro_id else ["astro_1"]
-    with faults_lock:
+    with state_lock:
         for a in targets:
             if a not in PROFILES:
                 print(f"  unknown astronaut '{a}' (have: {', '.join(PROFILES)})")
@@ -92,10 +118,24 @@ def set_fault(kind, astro_id=None):
             print(f"  {a}: {kind}")
 
 
+def set_activity(activity, astro_id=None):
+    target = astro_id or "astro_1"
+    if target not in PROFILES:
+        print(f"  unknown astronaut '{target}' (have: {', '.join(PROFILES)})")
+        return
+    with state_lock:
+        activities[target] = activity
+    print(f"  {target}: activity -> {activity}")
+
+
 def clear_all():
-    with faults_lock:
+    with state_lock:
         faults.clear()
     print("  all faults cleared")
+
+
+HELP = ("  faults: hr | hrhigh | spo2 | temp | fever | bp | resp  [id]  |  clear [id]\n"
+        "  activity: rest | sleep | exercise  [id]  |  quit")
 
 
 def command_loop():
@@ -110,6 +150,8 @@ def command_loop():
         cmd, arg = parts[0], (parts[1] if len(parts) > 1 else None)
         if cmd in FAULTS:
             set_fault(cmd, arg)
+        elif cmd in ACTIVITY_OFFSETS:
+            set_activity(cmd, arg)
         elif cmd == "clear":
             set_fault("clear", arg) if arg else clear_all()
         elif cmd in ("quit", "exit", "q"):
@@ -117,7 +159,7 @@ def command_loop():
             import os
             os._exit(0)
         else:
-            print("  commands: hr | spo2 | temp | fever | bp | resp  [id]  |  clear [id]  |  quit")
+            print(HELP)
 
 
 def main():
@@ -138,7 +180,7 @@ def main():
 
     threading.Thread(target=command_loop, daemon=True).start()
     print(f"Posting to {endpoint} every {args.interval}s for {', '.join(PROFILES)}.")
-    print("Commands: hr | spo2 | temp | fever | bp | resp  [id]  |  clear [id]  |  quit  (warm up ~60 s first)")
+    print(HELP + "\n  (warm up ~60 s first)")
 
     session = requests.Session()
     n = 0
