@@ -5,7 +5,7 @@ from datetime import timedelta
 from statistics import mean, stdev
 from typing import Optional
 
-from app.models import Reading
+from models import Reading
 
 METRICS = ["hr", "spo2", "temp", "bp_sys", "bp_dia", "resp"]
 RANK = {"info": 0, "warning": 1, "critical": 2}

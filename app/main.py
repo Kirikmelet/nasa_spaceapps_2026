@@ -7,12 +7,12 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 
-from app.alert_engine import RANK, AlertEngine
-from app.db import dbInstance
-from app.models import Alert, Reading, ReadingActivityType
+from alert_engine import RANK, AlertEngine
+from db import dbInstance
+from models import Alert, Reading, ReadingActivityType
 
 app = FastAPI(title="Astronaut Health Monitor")
-templates = Jinja2Templates(directory="app/templates")
+templates = Jinja2Templates(directory="templates")
 
 engine = AlertEngine()
 engine_lock = threading.Lock()  # the engine keeps rolling state; the DB has its own lock
@@ -115,4 +115,4 @@ def root():
     return RedirectResponse("/dashboard/")
 
 
-app.mount("/dashboard", StaticFiles(directory="app/static", html=True), name="dashboard")
+app.mount("/dashboard", StaticFiles(directory="static", html=True), name="dashboard")

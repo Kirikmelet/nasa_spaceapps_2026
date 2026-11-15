@@ -5,7 +5,7 @@ from datetime import datetime
 from enum import Enum
 from typing import List, Optional
 
-import app.models as models
+import models as models
 
 # Whitelist of tables -> columns. Identifiers can't be bound, so only
 # names from this dict are ever formatted into SQL. Values always use :name.
