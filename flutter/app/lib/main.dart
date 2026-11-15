@@ -1,8 +1,11 @@
 import 'dart:async';
+import "dart:io";
 
 import 'package:app/mental_wellness.dart';
 import 'package:app/settings.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+
 import 'package:material_ui/material_ui.dart';
 
 import 'api.dart';
@@ -130,6 +133,10 @@ class AlertWatcher {
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  if (Platform.isAndroid) {
+    final status = await Permission.accessLocalNetwork.request();
+    print(status);
+  }
   await initializeApi();
   runApp(const MainApp());
 }
